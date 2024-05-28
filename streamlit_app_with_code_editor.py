@@ -38,14 +38,14 @@ with st.container():
     with col1row1:
         with st.container():
             st.write("Chatbot 1")
-            if 'messages1' not in st.session_state:
-                st.session_state['messages1'] = []
+            if 'chat_history' not in st.session_state:
+                st.session_state['chat_history'] = []
             user_input1 = st.text_input("You: ", key="input1")
             if user_input1:
-                st.session_state['messages1'].append({"role": "user", "content": user_input1})
+                st.session_state['chat_history'].append({"role": "user", "content": user_input1})
                 response1 = chatbot_response(user_input1)
-                st.session_state['messages1'].append({"role": "bot", "content": response1})
-            for i, msg in enumerate(st.session_state['messages1']):
+                st.session_state['chat_history'].append({"role": "bot", "content": response1})
+            for i, msg in enumerate(st.session_state['chat_history']):
                 message(msg["content"], is_user=msg["role"] == "user", key=f"msg1_{i}")
     
     # Add code editor to the second quadrant (top-right)
@@ -61,14 +61,14 @@ with st.container():
                 "tomorrow_night_eighties", "twilight", "vibrant_ink", "xcode"
             ]
             KEYBINDINGS = ["emacs", "sublime", "vim", "vscode"]
-            INITIAL_CODE = """st.header("Streamlit Sandbox")
+            st.session_state.code = """st.header("Streamlit Sandbox")
 st.write("Play with Streamlit live in the browser!")
 
 table_data = {'Column 1': [1, 2], 'Column 2': [3, 4]}
 st.write(pd.DataFrame(data=table_data))
 """
             code = st_ace(
-                value=INITIAL_CODE,
+                value=st.session_state.code,
                 language="python",
                 placeholder="st.header('Hello world!')",
                 theme=st.selectbox("Theme", options=THEMES, index=26, key="theme"),
@@ -82,6 +82,11 @@ st.write(pd.DataFrame(data=table_data))
                 readonly=False,
                 key="ace-editor"
             )
+            # Question: how to edit code in here
+
+            st.session_state.code += "#new commment"
+            
+            
             st.write('Hit `CTRL+ENTER` to refresh')
             st.write('*Remember to save your code separately!*')
     
@@ -105,12 +110,10 @@ st.write(pd.DataFrame(data=table_data))
     # Add content to the fourth quadrant (bottom-right)
     with col2row2:
         with st.container():
-            st.write("This is the bottom-right quadrant.")
-            st.write("You can add any content here.")
             st.write("### Code Output")
             exec(code)
 
 # Check if the table was changed and send a message in the chatbot
 if 'table_changed' in st.session_state and st.session_state['table_changed']:
-    st.session_state['messages1'].append({"role": "bot", "content": "A change was made to the table."})
+    st.session_state['chat_history'].append({"role": "bot", "content": "A change was made to the table."})
     st.session_state['table_changed'] = False
