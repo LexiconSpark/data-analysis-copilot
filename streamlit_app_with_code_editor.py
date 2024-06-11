@@ -196,6 +196,7 @@ If you get an error, debug your code and try again.
 Only use the output of your code to answer the question.
 You might know the answer without running any code, but you should still run the code to get the answer.
 If it does not seem like you can write code to answer the question, just return "I don't know" as the answer.
+if you are ask to plot data, save the plot as "plot.png", then use st.image("plot.png") to display the plot.
 """
 
 # Pull the base prompt
@@ -219,7 +220,7 @@ If it does not seem like you can write code to answer the question, just return 
                         generated_code += response["intermediate_steps"][i][0].tool_input
                    
                     st.session_state.code = generated_code
-                    print(st.session_state.code)
+                   
 
 
             with tab3:
@@ -251,9 +252,10 @@ If it does not seem like you can write code to answer the question, just return 
             #     key="ace-editor"
             # )
             # Question: how to edit code in here
-
-                st.session_state.code += "#new commment"
-            
+                #if the update button is pressed
+                if code:
+                    st.session_state.code  = code
+                    
             
                 #st.write('Hit `CTRL+ENTER` to refresh')
                 #st.write('*Remember to save your code separately!*')
@@ -278,6 +280,7 @@ If it does not seem like you can write code to answer the question, just return 
     # Add content to the fourth quadrant (bottom-right)
     with col2row2:
         with st.container():
+
             st.write("### Code Output")
             exec(code)
 

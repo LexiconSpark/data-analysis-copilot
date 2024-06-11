@@ -16,6 +16,8 @@ content = st_ace(value=st.session_state.code, language='python', theme='monokai'
 if st.button('Update Code'):
     update_code()
 
+print(type(content))
+
 # Display the current content of the editor
 st.write("Editor content:")
 st.write(content)
