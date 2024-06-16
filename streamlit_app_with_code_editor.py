@@ -8,10 +8,16 @@ from langchain import hub
 from langchain.agents import AgentExecutor
 from langchain_experimental.tools import PythonREPLTool
 from langchain_experimental.tools import PythonAstREPLTool
+from langchain import OpenAI as OpenAI_2
+from langchain.agents import initialize_agent, AgentType
+from langchain.tools import Tool, DuckDuckGoSearchResults
+from langchain.memory import ConversationBufferMemory
+from langchain.chains import LLMMathChain
+
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_openai_functions_agent
 import matplotlib.pyplot as plt
-
+import re
 
 
 from streamlit_chat import message
@@ -187,6 +193,44 @@ with st.container():
                 st.write(st.session_state.plan)
                 
                 if st.button("Execute Plan"):
+#                   load_dotenv()
+                    os.environ["OPENAI_API_KEY"] = os.getenv('OPENAI_API_KEY')
+                    # Initialize the language model
+                    # llm = OpenAI_2(temperature=0)# Define the search tool
+
+                    # llm_math = LLMMathChain(llm=llm)
+                    # math_tool = Tool(
+                    # name='Calculator',
+                    # func=llm_math.run,
+                    # description='Useful for when you need to answer questions about math.'
+                    # )
+
+                    # ddg_search = DuckDuckGoSearchResults()
+                    # websearch_tool = Tool(
+                    #     name="Current Search",
+                    #     func=ddg_search.run,
+                    #     description="Useful for when you need to answer questions about current events or the current state of the world"
+                    # )
+
+                    # python_repl = PythonREPLTool()
+                    # python_tool = Tool(
+                    #     name = "Python Executer",
+                    #     func = python_repl.run,
+                    #     description = "Useful for when you want to test the code you wrote to debug"
+                    # )
+                    # # Define the tools the agent will use
+                    # tools = [math_tool, websearch_tool,python_tool]
+
+                    # # Initialize the agent with memory
+                    # memory = ConversationBufferMemory(memory_key="chat_history")
+                    # agent = initialize_agent(tools, llm, agent=AgentType.CONVERSATIONAL_REACT_DESCRIPTION, verbose=True, memory = memory)
+
+                    # # Define the input query
+                    # input_query = "write a code to execute this plan " + st.session_state.plan + " with this dataseset "+ st.session_state.df.to_csv()+" and display the result using st.write or st.image" + "only use the code you write to answer the question"
+
+                    # # Run the agent
+                    # response = agent.run(input=input_query, handle_parsing_errors=True)
+                    # print(response)
                     tools = [PythonREPLTool()]
 # Define the instructions for the agent
                     instructions = """
@@ -196,7 +240,8 @@ If you get an error, debug your code and try again.
 Only use the output of your code to answer the question.
 You might know the answer without running any code, but you should still run the code to get the answer.
 If it does not seem like you can write code to answer the question, just return "I don't know" as the answer.
-if you are ask to plot data, save the plot as "plot.png", then use st.image("plot.png") to display the plot.
+if you are ask to plot data, save the plot as "plot.png", then always use st.image("plot.png") to display the plot.
+You can use st.write("your answer") to display the answer if you are asked to calculate something.
 """
 
 # Pull the base prompt
@@ -217,10 +262,23 @@ if you are ask to plot data, save the plot as "plot.png", then use st.image("plo
                     response = agent_executor.invoke({"input": input_data})
                     generated_code = ""
                     for i in range(0,len(response["intermediate_steps"])):
-                        generated_code += response["intermediate_steps"][i][0].tool_input
+                         generated_code += response["intermediate_steps"][i][0].tool_input
                    
-                    st.session_state.code = generated_code
-                   
+                    #st.session_state.code = generated_code
+                    code_with_display = client.chat.completions.create(
+                            model=st.session_state["openai_model"],
+                            messages = [{"role": "user", "content": "use st.write or st.image to display the result of the given code"+ generated_code
+                                         +" Only respond with code as plain text without code block syntax around it."}],
+                            
+                    )
+                    #print(generated_code)
+
+                    
+                    st.session_state.code = code_with_display.choices[0].message.content
+                    #print("new"+new_code)
+                  
+                    # instructions_display = "display the result of the given code using st.write or st.image"
+                    # agent_display = create_openai_functions_agent(ChatOpenAI(temperature=0, openai_api_key=openai_api_key_1), tools, prompt)
 
 
             with tab3:
