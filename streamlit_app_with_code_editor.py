@@ -25,6 +25,18 @@ from streamlit_ace import st_ace
 from openai import OpenAI
 
 load_dotenv()
+
+## using langsmith 
+# video for how langsmith is used in this demo code: https://share.descript.com/view/k4b3fyvaESB
+# To learn about this: https://youtu.be/tFXm5ijih98
+# To check the running result of langsmith, please go to: https://smith.langchain.com/
+from langsmith import Client
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
+os.environ["LANGCHAIN_API_KEY"] = os.getenv('LANGCHAIN_API_KEY')
+#Initialize LangSmith client
+client_langsmith = Client()
+
 client = OpenAI(api_key= os.getenv("OPENAI_API_KEY"))
 
 if "openai_model" not in st.session_state:
@@ -205,12 +217,12 @@ with st.container():
                     # description='Useful for when you need to answer questions about math.'
                     # )
 
-                    # ddg_search = DuckDuckGoSearchResults()
-                    # websearch_tool = Tool(
-                    #     name="Current Search",
-                    #     func=ddg_search.run,
-                    #     description="Useful for when you need to answer questions about current events or the current state of the world"
-                    # )
+                    ddg_search = DuckDuckGoSearchResults()
+                    websearch_tool = Tool(
+                        name="Current_Search",
+                        func=ddg_search.run,
+                         description="Useful for when you need to answer questions about current events or the current state of the world, by searching on internet"
+                 )
 
                     # python_repl = PythonREPLTool()
                     # python_tool = Tool(
@@ -231,7 +243,7 @@ with st.container():
                     # # Run the agent
                     # response = agent.run(input=input_query, handle_parsing_errors=True)
                     # print(response)
-                    tools = [PythonREPLTool()]
+                    tools = [PythonREPLTool(), websearch_tool]
 # Define the instructions for the agent
                     instructions = """
 You are an agent designed to write and execute python code to answer questions.
@@ -242,6 +254,7 @@ You might know the answer without running any code, but you should still run the
 If it does not seem like you can write code to answer the question, just return "I don't know" as the answer.
 if you are ask to plot data, save the plot as "plot.png", then always use st.image("plot.png") to display the plot.
 You can use st.write("your answer") to display the answer if you are asked to calculate something.
+Anything of the part of the code that is todo with searching on the internet please do not write code for it. just skip it and write a comment as a placeholder
 """
 
 # Pull the base prompt
@@ -261,9 +274,11 @@ You can use st.write("your answer") to display the answer if you are asked to ca
 # Execute the agent
                     response = agent_executor.invoke({"input": input_data})
                     generated_code = ""
+                    #import pdb; pdb.set_trace()
+                    
                     for i in range(0,len(response["intermediate_steps"])):
                          generated_code += response["intermediate_steps"][i][0].tool_input
-                   
+                    
                     #st.session_state.code = generated_code
                     code_with_display = client.chat.completions.create(
                             model=st.session_state["openai_model"],
@@ -276,7 +291,8 @@ You can use st.write("your answer") to display the answer if you are asked to ca
                     
                     st.session_state.code = code_with_display.choices[0].message.content
                     #print("new"+new_code)
-                  
+                    st.session_state.messages.append({"role": "assistant", "content": response["output"]})
+                    st.experimental_rerun()
                     # instructions_display = "display the result of the given code using st.write or st.image"
                     # agent_display = create_openai_functions_agent(ChatOpenAI(temperature=0, openai_api_key=openai_api_key_1), tools, prompt)
 
