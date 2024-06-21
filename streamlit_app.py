@@ -224,25 +224,7 @@ with st.container():
                          description="Useful for when you need to answer questions about current events or the current state of the world, by searching on internet"
                  )
 
-                    # python_repl = PythonREPLTool()
-                    # python_tool = Tool(
-                    #     name = "Python Executer",
-                    #     func = python_repl.run,
-                    #     description = "Useful for when you want to test the code you wrote to debug"
-                    # )
-                    # # Define the tools the agent will use
-                    # tools = [math_tool, websearch_tool,python_tool]
-
-                    # # Initialize the agent with memory
-                    # memory = ConversationBufferMemory(memory_key="chat_history")
-                    # agent = initialize_agent(tools, llm, agent=AgentType.CONVERSATIONAL_REACT_DESCRIPTION, verbose=True, memory = memory)
-
-                    # # Define the input query
-                    # input_query = "write a code to execute this plan " + st.session_state.plan + " with this dataseset "+ st.session_state.df.to_csv()+" and display the result using st.write or st.image" + "only use the code you write to answer the question"
-
-                    # # Run the agent
-                    # response = agent.run(input=input_query, handle_parsing_errors=True)
-                    # print(response)
+                    
                     tools = [PythonREPLTool(), websearch_tool]
 # Define the instructions for the agent
                     instructions = """
@@ -310,21 +292,7 @@ Anything of the part of the code that is todo with searching on the internet ple
                 KEYBINDINGS = ["emacs", "sublime", "vim", "vscode"]
 
                 code = st_ace(value=st.session_state.code, language='python', theme='monokai')
-            #     code = st_ace(
-            #     value=st.session_state.code,
-            #     language="python",
-            #     placeholder="st.header('Hello world!')",
-            #     theme=st.selectbox("Theme", options=THEMES, index=26, key="theme"),
-            #     keybinding=st.selectbox("Keybinding mode", options=KEYBINDINGS, index=3, key="keybinding"),
-            #     font_size=st.slider("Font size", 5, 24, 14, key="font_size"),
-            #     tab_size=st.slider("Tab size", 1, 8, 4, key="tab_size"),
-            #     wrap=st.checkbox("Wrap lines", value=False, key="wrap"),
-            #     show_gutter=True,
-            #     show_print_margin=True,
-            #     auto_update=True,
-            #     readonly=False,
-            #     key="ace-editor"
-            # )
+            
             # Question: how to edit code in here
                 #if the update button is pressed
                 if code:
@@ -332,9 +300,7 @@ Anything of the part of the code that is todo with searching on the internet ple
                     
             
                 #st.write('Hit `CTRL+ENTER` to refresh')
-                #st.write('*Remember to save your code separately!*')
-
-    # Create two columns for the bottom row
+                #st.write('*Remember to save your code separately!*')    # Create two columns for the bottom row
     col1row2, col2row2 = st.columns(2)
     
     # Add editable table to the third quadrant (bottom-left)
