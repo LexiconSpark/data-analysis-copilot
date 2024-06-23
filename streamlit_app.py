@@ -105,7 +105,7 @@ def get_data(placeholder):
 # Function to generate a random dataframe
 
 
-def generate_random_dataframe():
+def get_dataframe():
     df = pd.DataFrame(
         {
             "A": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
@@ -320,7 +320,7 @@ Only respond with code as plain text without code block syntax around it. Again,
         with st.container():
             st.write('### User Data Set')
             if 'df' not in st.session_state:
-                st.session_state.df = generate_random_dataframe()
+                st.session_state.df = get_dataframe()
             edited_df = st.data_editor(
                 st.session_state.df,
                 key="editable_table",
