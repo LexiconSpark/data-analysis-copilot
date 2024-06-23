@@ -185,7 +185,15 @@ with st.container():
                             
                                 plan = client.chat.completions.create(
                                     model = st.session_state["openai_model"],
-                                    messages = [{"role": "user", "content": user_input1 +" \n make a plan that is simple to understand without technical terms to create code in python to analyze this data(do not include the code), only include the plan as list of steps in the output"+ "\n this is the data \n" + result}],
+                                    messages = [{"role": "user", "content": user_input1 +""" \n make a plan that is simple to understand without technical terms to create code in python 
+                                    to analyze this data(do not include the code), only include the plan as list of steps in the output. 
+                                    At the same time, you are also given a list of tools, they are PythonREPLTool for writing code, and another one is called web_search for searching on the web. 
+                                    Please assign the right tool to do each step, knowing the tools that got activated later will know the output of the previous tools. 
+                                    the plan can be hierarchical, meaning that when multiple related and consecutive step can be grouped in one big step and be achieve by the same tool,
+                                    you can group under a parent step and have them as sub-steps and only mention the tool recommended for the partent step. 
+                                    At the each parent step of the plan, please indicate the tool you recommend in a [] such as [Tool: web_search], and put it at the begining of that step. Do not indicate the tool recommendation for sub-steps
+                                    In your output please only give one coherent plan with no analysis
+                                    """+ "\n this is the data \n" + result}],
                                     stream = True
                                 )   
                                 
@@ -219,7 +227,7 @@ with st.container():
 
                     ddg_search = DuckDuckGoSearchResults()
                     websearch_tool = Tool(
-                        name="Current_Search",
+                        name="web_search",
                         func=ddg_search.run,
                          description="Useful for when you need to answer questions about current events or the current state of the world, by searching on internet"
                  )
@@ -248,7 +256,7 @@ Anything of the part of the code that is todo with searching on the internet ple
                     agent = create_openai_functions_agent(ChatOpenAI(temperature=0, openai_api_key=openai_api_key_1), tools, prompt)
 
 # Create the agent executor
-                    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose= False, return_intermediate_steps = True)
+                    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose = True, return_intermediate_steps = True)
 
 # Example input
                     input_data = "execute this plan "+ st.session_state.plan + " with this dataseset "+ st.session_state.df.to_csv()
@@ -292,6 +300,7 @@ Anything of the part of the code that is todo with searching on the internet ple
                 KEYBINDINGS = ["emacs", "sublime", "vim", "vscode"]
 
                 code = st_ace(value=st.session_state.code, language='python', theme='monokai')
+                
             
             # Question: how to edit code in here
                 #if the update button is pressed
