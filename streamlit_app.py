@@ -27,15 +27,6 @@ from openai import OpenAI
 load_dotenv()
 ROW_HIGHT = 600
 TEXTBOX_HIGHT = 90
-## using langsmith
-# video for how langsmith is used in this demo code: https://share.descript.com/view/k4b3fyvaESB
-# To learn about this: https://youtu.be/tFXm5ijih98
-# To check the running result of langsmith, please go to: https://smith.langchain.com/
-os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
-os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
-# Initialize LangSmith client
-langsmith_client = LangSmithClient()
 
 # Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -45,20 +36,6 @@ openai_client = OpenAI(api_key=OPENAI_API_KEY)
 if "openai_model" not in st.session_state:
     st.session_state["openai_model"] = "gpt-4o"
 
-# Below is a method for creating a variable that auto refreshes on the frontend as the number changes
-# Find the tutorial of implimentation here: https://discuss.streamlit.io/t/i-created-way-simpler-cleaner-session-state-code-with-auto-refresh/36150
-class SessionStateAutoClass:
-    def __setattr__(self, name, value):
-        if getattr(self, name, None) != value:
-            st.session_state[name] = value
-            st.rerun()
-    def __getattr__(self, name):
-        return st.session_state.get(name, None)
-session_state_auto = SessionStateAutoClass()
-if "formatted_output" not in st.session_state:
-    st.session_state.formatted_output = ""
-session_state_auto.formatted_output = st.session_state.formatted_output
-
 # function to convert a sentence to stream
 def get_stream(sentence):
     for word in sentence.split():
@@ -66,7 +43,7 @@ def get_stream(sentence):
         time.sleep(0.05)
 
 
-# function to get the dataframe in csv format
+# function to get the dataframe of the csv
 def get_data(placeholder):
     new_data = st.session_state.df.to_csv()
     return new_data
@@ -83,6 +60,12 @@ def get_dataframe():
     )
     return df
 
+# This is the function for handling changes in csv
+def handle_table_change():
+    if "table_changed" in st.session_state and st.session_state["table_changed"]:
+        st.session_state["chat_history"].append(
+            {"role": "bot", "content": "A change was made to the table."}
+        )
 
 # function to generate the reponse of the chatbot
 def generate_chatbot_response(openai_client, session_state, user_input):
@@ -137,7 +120,7 @@ def generate_chatbot_response(openai_client, session_state, user_input):
             )
         )
 
-        # get the dataframe in csv format
+        # get the dataframe of the csv
         result = get_data(session_state.df)
 
         # update the current user input
@@ -180,39 +163,6 @@ In your output please only give one coherent plan with no analysis
         response = st.write_stream(get_stream(stream.choices[0].message.content))
 
     return response
-
-
-def generate_code_for_display_report(execution_agent_response):
-
-    # update the agent thoughtflow(all of steps agent took)
-    st.session_state.agent_thoughtflow = (
-        "Here is the final output: "
-        + str(execution_agent_response["output"])
-        + """
-Here is the log of the different step's output, you will be able to find the useful information within there: \n"""
-        + "".join(
-            str(step[0].log) for step in execution_agent_response["intermediate_steps"]
-        )
-    )
-
-    # generate the code for displaying the report
-    code_with_display = openai_client.chat.completions.create(
-        model=st.session_state["openai_model"],
-        messages=[
-            {
-                "role": "user",
-                "content": """You are creating a report for the user's question: """
-                + st.session_state.current_user_input
-                + """use st.write or st.image to display the result of the given thoughtflow of an agent that already did all the calculation needed to answer the question: \n\n\n------------------------\n"""
-                + st.session_state.agent_thoughtflow
-                + """
-\n\n\n------------------------\nNote that all the results are already in the thoughtflow, you just need to print them out rather than trying to recalculate them.
-Only respond with code as plain text without code block syntax around it. Again, do not write code to do any calculation. you are only here to print the results from the above thought flow""",
-            }
-        ],
-    )
-
-    return code_with_display
 
 
 # Functions to execute the plan generated
@@ -302,13 +252,38 @@ def format_intermediate_steps(response):
     formatted_output += f"Final Output: \n `{response["output"]}`"
     return formatted_output
 
-# Function to handle changes in the editable table
-def handle_table_change():
-    st.session_state["table_changed"] = True
+# Function to generate code that is used to display the information within the report
+def generate_code_for_display_report(execution_agent_response):
 
+    # update the agent thoughtflow(all of steps agent took)
+    st.session_state.agent_thoughtflow = (
+        "Here is the final output: "
+        + str(execution_agent_response["output"])
+        + """
+Here is the log of the different step's output, you will be able to find the useful information within there: \n"""
+        + "".join(
+            str(step[0].log) for step in execution_agent_response["intermediate_steps"]
+        )
+    )
 
-# set the page config
-st.set_page_config(layout="wide")
+    # generate the code for displaying the report
+    code_with_display = openai_client.chat.completions.create(
+        model=st.session_state["openai_model"],
+        messages=[
+            {
+                "role": "user",
+                "content": """You are creating a report for the user's question: """
+                + st.session_state.current_user_input
+                + """use st.write or st.image to display the result of the given thoughtflow of an agent that already did all the calculation needed to answer the question: \n\n\n------------------------\n"""
+                + st.session_state.agent_thoughtflow
+                + """
+\n\n\n------------------------\nNote that all the results are already in the thoughtflow, you just need to print them out rather than trying to recalculate them.
+Only respond with code as plain text without code block syntax around it. Again, do not write code to do any calculation. you are only here to print the results from the above thought flow""",
+            }
+        ],
+    )
+
+    return code_with_display
 
 
 # Initialize the state variables
@@ -318,11 +293,37 @@ if "code" not in st.session_state:
     st.session_state.code = """
 st.write("There is no report created yet, please ask the chatbot to create a report if you need")
 """
-# Create the main container
+if "thoughtflow" not in st.session_state:
+    st.session_state.agent_thoughtflow = ""
+
+# Below is a method for creating a state variable that auto refreshes on the frontend as the value changes, without the need to manually do st.rerun()
+# Find the tutorial of implimentation here: https://discuss.streamlit.io/t/i-created-way-simpler-cleaner-session-state-code-with-auto-refresh/36150
+class SessionStateAutoClass:
+    def __setattr__(self, name, value):
+        if getattr(self, name, None) != value:
+            st.session_state[name] = value
+            st.rerun()
+    def __getattr__(self, name):
+        return st.session_state.get(name, None)
+session_state_auto = SessionStateAutoClass()
+
+# Initialize session_state_auto.formatted_output as a state variable that auto refreshes on the frontend
+if "formatted_output" not in st.session_state:
+    st.session_state.formatted_output = ""
+session_state_auto.formatted_output = st.session_state.formatted_output
+
+
+################################################
+##### Below are all the code to do with UI #####
+################################################
+
+# set the page config
+st.set_page_config(layout="wide")
+
+# Create the main container of the UI
 with st.container():
     # Create two columns for the top row
     col1row1, col2row1 = st.columns(2)
-    st.session_state.agent_thoughtflow = ""
 
     # Add chatbot to the first quadrant (top-left)
     with col1row1:
@@ -421,9 +422,3 @@ with st.container():
             # execute the code
             exec(reporting_code)
 
-# Check if the table was changed and send a message in the chatbot
-if "table_changed" in st.session_state and st.session_state["table_changed"]:
-    st.session_state["chat_history"].append(
-        {"role": "bot", "content": "A change was made to the table."}
-    )
-    st.session_state["table_changed"] = False
