@@ -19,14 +19,14 @@ from langchain_openai import ChatOpenAI
 from langchain.agents import create_openai_functions_agent
 import matplotlib.pyplot as plt
 import re
-
-from langsmith import Client
+from langsmith import Client as LangSmithClient
 from streamlit_chat import message
 from streamlit_ace import st_ace
 from openai import OpenAI
 
 load_dotenv()
-
+ROW_HIGHT = 600
+TEXTBOX_HIGHT = 90
 ## using langsmith 
 # video for how langsmith is used in this demo code: https://share.descript.com/view/k4b3fyvaESB
 # To learn about this: https://youtu.be/tFXm5ijih98
@@ -35,34 +35,15 @@ os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
 os.environ["LANGCHAIN_API_KEY"] = os.getenv('LANGCHAIN_API_KEY')
 #Initialize LangSmith client
-client_langsmith = Client()
+langsmith_client = LangSmithClient()
 
+#Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=OPENAI_API_KEY)
+openai_client = OpenAI(api_key=OPENAI_API_KEY)
+
 
 if "openai_model" not in st.session_state:
     st.session_state["openai_model"] = "gpt-4o"
-
-#list the functions want open ai to use
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "trigger_report_generation",
-            "description": "Trigger this function when user asks about creating a report",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "user_message": {
-                        "type": "string",
-                        "description": "The user's message asking about creating a report",
-                    }
-                },
-                "required": ["user_message"],
-            },
-        }
-    }
-]
 
 def get_stream(sentence):
         for word in sentence.split():
@@ -72,8 +53,6 @@ def get_stream(sentence):
 
 def get_data(placeholder):
     new_data = st.session_state.df.to_csv()
-
-
     return new_data
 # Function to generate a random dataframe
 
@@ -88,6 +67,57 @@ def get_dataframe():
     )
     return df
 
+def generate_chatbot_response(openai_client, session_state, user_input):
+    stream = openai_client.chat.completions.create(
+        model=session_state["openai_model"],
+        messages=[{"role": "system", "content": "You are a data analysis Copilot that is able to help user to generate report with data analysis in them. you are able to search on internet and you're able to help people to look into the table data from the user. however currently you can only do those if user is sending you a message stating clearly that they like to create a report. if they are not asking you about creating a report please try to answer their questions and explain what you can do to help, and ask them to create a report if that's their goal if you think it is needed"}] +
+        [{"role": m["role"], "content": m["content"]} for m in session_state.messages],
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "trigger_report_generation",
+                    "description": "Trigger this function when user asks about creating a report",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "user_message": {
+                                "type": "string",
+                                "description": "The user's message asking about creating a report",
+                            }
+                        },
+                        "required": ["user_message"],
+                    },
+                }
+            }
+        ],
+        tool_choice="auto"
+    )
+    response_message = stream.choices[0].message
+    tool_calls = response_message.tool_calls
+    if tool_calls and tool_calls[0].function.name == "trigger_report_generation":
+        st.write_stream(get_stream("Got it, here is a plan to create report for this request of yours:"))
+        result = get_data(session_state.df)
+        session_state.current_user_input = user_input
+        plan = openai_client.chat.completions.create(
+            model=session_state["openai_model"],
+            messages=[{"role": "user", "content": user_input + """ \n make a plan that is simple to understand without technical terms to create code in python 
+to analyze this data(do not include the code), only include the plan as list of steps in the output. 
+At the same time, you are also given a list of tools, they are python_repl_tool for writing code, and another one is called web_search for searching on the web. 
+Please assign the right tool to do each step, knowing the tools that got activated later will know the output of the previous tools. 
+the plan can be hierarchical, meaning that when multiple related and consecutive step can be grouped in one big step and be achieve by the same tool,
+you can group under a parent step and have them as sub-steps and only mention the tool recommended for the partent step. 
+At the each parent step of the plan, please indicate the tool you recommend in a [] such as [Tool: web_search], and put it at the begining of that step. Do not indicate the tool recommendation for sub-steps
+In your output please only give one coherent plan with no analysis
+                            """ + "\n this is the data \n" + result}],
+            stream=True
+        )
+        response = st.write_stream(plan)
+        st.write_stream(get_stream("📝 If you like the plan, please click on 'Execute Plan' button on the 'Plan' tab in the top right panel. Or feel free to ask me to revise the plan in this chat"))
+        session_state.plan = response
+    else:
+        response = st.write_stream(get_stream(stream.choices[0].message.content))
+    return response
 
 # Function to handle changes in the editable table
 def handle_table_change():
@@ -109,79 +139,40 @@ with st.container():
     
     # Add chatbot to the first quadrant (top-left)
     with col1row1:
-        container1 = st.container(height = 700)
-        with container1:
-            container1.title("Chatbot")
-            # Initialize chat history
-            if "messages" not in st.session_state:
-                st.session_state.messages = []
-            # Display chat messages from history on app rerun
-            for message in st.session_state.messages:
-                with container1.chat_message(message["role"]):
-                    st.markdown(message["content"])
-                    
-        with st.container():
-
-            user_input = st.chat_input("What is up?")
-            if user_input:
-        # Display user message in chat message container
-                with container1.chat_message("user"):
-                    st.markdown(user_input)
-        # Add user message to chat history
+        with st.container(height=ROW_HIGHT):
+            chat_history_container = st.container(height=ROW_HIGHT-TEXTBOX_HIGHT)
+            with chat_history_container:
+                chat_history_container.title("Chatbot")
+                # Initialize chat history if it doesn't exist
+                if "messages" not in st.session_state:
+                    st.session_state.messages = []
+                # Display chat messages from history on app rerun
+                for message in st.session_state.messages:
+                    with chat_history_container.chat_message(message["role"]):
+                        st.markdown(message["content"])
+                        
+            input_textbox_container = st.container()
+            with input_textbox_container:
+                # Collect user input via chat
+                user_input = st.chat_input("What is up?")
+                if user_input:
+                    # Display user message in chat message container
+                    with chat_history_container.chat_message("user"):
+                        st.markdown(user_input)
+                    # Add user message to chat history
                     st.session_state.messages.append({"role": "user", "content": user_input})
 
-# Display assistant response in chat message container
+                    # Display assistant response in chat message container
+                    with chat_history_container.chat_message("assistant"):
+                        response = generate_chatbot_response(openai_client, st.session_state, user_input)
+                    # Append the assistant's response to the chat history
+                    st.session_state.messages.append({"role": "assistant", "content": response})
                 
-                with container1.chat_message("assistant"):
-                    stream = client.chat.completions.create(
-                    model=st.session_state["openai_model"],
-                    messages=[{"role": "system", "content":"You are a data analysis Copilot that is able to help user to generate report with data analysis in them. you are able to search on internet and you're able to help people to look into the table data from the user. however currently you can only do those if user is sending you a message stating clearly that they like to create a report. if they are not asking you about creating a report please try to answer their questions and explain what you can do to help, and ask them to create a report if that's their goal if you think it is needed"}]+
-                        [{"role": m["role"], "content": m["content"]}
-                            for m in st.session_state.messages
-                            ],
-                        
-                        tools = tools,
-                        tool_choice = "auto"
-                    )
-                    # Append the message to messages list
-                    response_message = stream.choices[0].message 
-
-                    #response = st.write_stream(stream)
-                    tool_calls = response_message.tool_calls
-                    if tool_calls and tool_calls[0].function.name == "trigger_report_generation":
-                        # tool_call_id = tool_calls[0].id
-                        # tool_function_name = tool_calls[0].function.name
-                        st.write_stream(get_stream("Got it, here is a plan to create report for this request of yours:"))
-
-                        result = get_data(st.session_state.df)
-                    
-                        st.session_state.current_user_input = user_input
-                        plan = client.chat.completions.create(
-                            model = st.session_state["openai_model"],
-                            messages = [{"role": "user", "content": user_input +""" \n make a plan that is simple to understand without technical terms to create code in python 
-                            to analyze this data(do not include the code), only include the plan as list of steps in the output. 
-                            At the same time, you are also given a list of tools, they are python_repl_tool for writing code, and another one is called web_search for searching on the web. 
-                            Please assign the right tool to do each step, knowing the tools that got activated later will know the output of the previous tools. 
-                            the plan can be hierarchical, meaning that when multiple related and consecutive step can be grouped in one big step and be achieve by the same tool,
-                            you can group under a parent step and have them as sub-steps and only mention the tool recommended for the partent step. 
-                            At the each parent step of the plan, please indicate the tool you recommend in a [] such as [Tool: web_search], and put it at the begining of that step. Do not indicate the tool recommendation for sub-steps
-                            In your output please only give one coherent plan with no analysis
-                            """+ "\n this is the data \n" + result}],
-                            stream = True
-                        )   
-                        
-                        response = st.write_stream(plan)
-                        st.write_stream(get_stream("📝 If you like the plan, please click on 'Execute Plan' button on the 'Plan' tab in the top right panel. Or feel free to ask me to revise the plan in this chat"))
-                        st.session_state.plan = response
-                    else:
-                        response = st.write_stream(get_stream(stream.choices[0].message.content))
-            
-                st.session_state.messages.append({"role": "assistant", "content": response})
+    
     with col2row1:
-        
-        tab2, tab3 = st.tabs(["Plan", "Code"])
-        with st.container():
-            with tab2:
+        with st.container(height=ROW_HIGHT):
+            col2row1_plan_tab, col2row1_report_code_tab = st.tabs(["Plan", "Code for Formating the Report"])
+            with col2row1_plan_tab:
                 st.write(st.session_state.plan)
                 
                 if st.button("Execute Plan"):
@@ -240,7 +231,7 @@ Anything of the part of the code that is todo with searching on the internet ple
                     
 
                     #st.session_state.code = agent_thoughtflow
-                    code_with_display = client.chat.completions.create(
+                    code_with_display = openai_client.chat.completions.create(
                             model=st.session_state["openai_model"],
                             messages = [{"role": "user", "content": """You are creating a report for the user's question: """
                             + st.session_state.current_user_input 
@@ -261,7 +252,7 @@ Only respond with code as plain text without code block syntax around it. Again,
                     # agent_display = create_openai_functions_agent(ChatOpenAI(temperature=0, OPENAI_API_KEY=OPENAI_API_KEY), tools, prompt)
 
 
-            with tab3:
+            with col2row1_report_code_tab:
                 st.write('### Code editor')
                 st.write(st.session_state.agent_thoughtflow) #TODO for Ilya to print this better 
                 THEMES = [
@@ -289,7 +280,7 @@ Only respond with code as plain text without code block syntax around it. Again,
     
     # Add editable table to the third quadrant (bottom-left)
     with col1row2:
-        with st.container():
+        with st.container(height=ROW_HIGHT):
             st.write('### User Data Set')
             if 'df' not in st.session_state:
                 st.session_state.df = get_dataframe()
@@ -303,7 +294,7 @@ Only respond with code as plain text without code block syntax around it. Again,
     
     # Add content to the fourth quadrant (bottom-right)
     with col2row2:
-        with st.container():
+        with st.container(height=ROW_HIGHT):
             st.write("### AI Generated Report")
             exec(reporting_code)
 
