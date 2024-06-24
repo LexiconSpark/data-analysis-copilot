@@ -20,7 +20,7 @@ from langchain.agents import create_openai_functions_agent
 import matplotlib.pyplot as plt
 import re
 
-
+from langsmith import Client
 from streamlit_chat import message
 from streamlit_ace import st_ace
 from openai import OpenAI
@@ -31,7 +31,6 @@ load_dotenv()
 # video for how langsmith is used in this demo code: https://share.descript.com/view/k4b3fyvaESB
 # To learn about this: https://youtu.be/tFXm5ijih98
 # To check the running result of langsmith, please go to: https://smith.langchain.com/
-from langsmith import Client
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
 os.environ["LANGCHAIN_API_KEY"] = os.getenv('LANGCHAIN_API_KEY')
@@ -49,46 +48,20 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "get_data",
-            "description": "get the dataframe as csv formate",
+            "name": "trigger_report_generation",
+            "description": "Trigger this function when user asks about creating a report",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "placeholder": {
+                    "user_message": {
                         "type": "string",
-                        "description": "the placeholder of the method",
+                        "description": "The user's message asking about creating a report",
                     }
                 },
-                "required": ["message"],
+                "required": ["user_message"],
             },
         }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_n_day_weather_forecast",
-            "description": "Get an N-day weather forecast",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "The city and state, e.g. San Francisco, CA",
-                    },
-                    "format": {
-                        "type": "string",
-                        "enum": ["celsius", "fahrenheit"],
-                        "description": "The temperature unit to use. Infer this from the users location.",
-                    },
-                    "num_days": {
-                        "type": "integer",
-                        "description": "The number of days to forecast",
-                    }
-                },
-                "required": ["location", "format", "num_days"]
-            },
-        }
-    },
+    }
 ]
 
 def get_stream(sentence):
@@ -125,15 +98,14 @@ st.set_page_config(layout='wide')
 if "plan" not in st.session_state:
     st.session_state.plan = ""
 if "code" not in st.session_state:
-    st.session_state.code = """st.header("Streamlit Sandbox")
-st.write("Play with Streamlit live in the browser!")
-
-table_data = {'Column 1': [1, 2], 'Column 2': [3, 4]}
-st.write(pd.DataFrame(data=table_data))"""
+    st.session_state.code = """
+st.write("There is no report created yet, please ask the chatbot to create a report if you need")
+"""
 # Create the main container
 with st.container():
     # Create two columns for the top row
     col1row1, col2row1 = st.columns(2)
+    st.session_state.agent_thoughtflow = ""
     
     # Add chatbot to the first quadrant (top-left)
     with col1row1:
@@ -159,11 +131,11 @@ with st.container():
                     st.session_state.messages.append({"role": "user", "content": user_input})
 
 # Display assistant response in chat message container
-                message = {"role": "system", "content":"You are a data analysis expert if you are asked anything about the data, make a plan for implementing code to analyze"}
+                
                 with container1.chat_message("assistant"):
                     stream = client.chat.completions.create(
                     model=st.session_state["openai_model"],
-                    messages=[{"role": "system", "content":"You are a data analysis expert if you are asked to analyze data, get the data make a plan for implementing code to analyze"}]+
+                    messages=[{"role": "system", "content":"You are a data analysis Copilot that is able to help user to generate report with data analysis in them. you are able to search on internet and you're able to help people to look into the table data from the user. however currently you can only do those if user is sending you a message stating clearly that they like to create a report. if they are not asking you about creating a report please try to answer their questions and explain what you can do to help, and ask them to create a report if that's their goal if you think it is needed"}]+
                         [{"role": m["role"], "content": m["content"]}
                             for m in st.session_state.messages
                             ],
@@ -176,9 +148,10 @@ with st.container():
 
                     #response = st.write_stream(stream)
                     tool_calls = response_message.tool_calls
-                    if tool_calls:
-                        tool_call_id = tool_calls[0].id
-                        tool_function_name = tool_calls[0].function.name
+                    if tool_calls and tool_calls[0].function.name == "trigger_report_generation":
+                        # tool_call_id = tool_calls[0].id
+                        # tool_function_name = tool_calls[0].function.name
+                        st.write_stream(get_stream("Got it, here is a plan to create report for this request of yours:"))
 
                         result = get_data(st.session_state.df)
                     
@@ -197,9 +170,8 @@ with st.container():
                             stream = True
                         )   
                         
-
-                    
                         response = st.write_stream(plan)
+                        st.write_stream(get_stream("📝 If you like the plan, please click on 'Execute Plan' button on the 'Plan' tab in the top right panel. Or feel free to ask me to revise the plan in this chat"))
                         st.session_state.plan = response
                     else:
                         response = st.write_stream(get_stream(stream.choices[0].message.content))
@@ -307,7 +279,7 @@ Only respond with code as plain text without code block syntax around it. Again,
             
             # Question: how to edit code in here
                 #if the update button is pressed
-                if code:
+                if reporting_code:
                     st.session_state.code  = reporting_code
                     
             
