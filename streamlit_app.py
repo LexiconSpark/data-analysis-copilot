@@ -14,7 +14,6 @@ from langchain.tools import Tool
 from langchain_community.tools import DuckDuckGoSearchResults
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import LLMMathChain
-
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_openai_functions_agent
 import matplotlib.pyplot as plt
@@ -214,7 +213,7 @@ Anything of the part of the code that is todo with searching on the internet ple
         agent=agent, tools=tools, verbose=True, return_intermediate_steps=True
     )
 
-    # Example input
+    # building the input data
     input_data = (
         "execute this plan "
         + plan
@@ -224,20 +223,21 @@ Anything of the part of the code that is todo with searching on the internet ple
 
     # Execute the agent
     response = agent_executor.invoke({"input": input_data})
-    
-    # format the agent intermediate steps
-    session_state_auto.formatted_output = format_intermediate_steps(response)
 
     # generate the code for displaying the report
     code_for_displaying_report = generate_code_for_display_report(response)
 
     # update the code
     st.session_state.code = code_for_displaying_report.choices[0].message.content
-
+        
     # update the chat history
     st.session_state.messages.append(
         {"role": "assistant", "content": response["output"]}
     )
+    
+    # format the agent intermediate steps, having this step at the botton of the function because it uses the special session_state_auto variable, as it could trigger st.rerun() within it and sometimes interrupt other steps.
+    session_state_auto.formatted_output = format_intermediate_steps(response)
+
     st.rerun()
 
 # Function to format the intermediate steps from the agent for display
@@ -297,6 +297,7 @@ if "thoughtflow" not in st.session_state:
     st.session_state.agent_thoughtflow = ""
 
 # Below is a method for creating a state variable that auto refreshes on the frontend as the value changes, without the need to manually do st.rerun()
+# Be careful with using it since it uses the special session_state_auto variable, as it could trigger st.rerun() within it and sometimes interrupt other steps.
 # Find the tutorial of implimentation here: https://discuss.streamlit.io/t/i-created-way-simpler-cleaner-session-state-code-with-auto-refresh/36150
 class SessionStateAutoClass:
     def __setattr__(self, name, value):
