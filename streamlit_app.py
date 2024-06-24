@@ -31,32 +31,32 @@ TEXTBOX_HIGHT = 90
 # video for how langsmith is used in this demo code: https://share.descript.com/view/k4b3fyvaESB
 # To learn about this: https://youtu.be/tFXm5ijih98
 # To check the running result of langsmith, please go to: https://smith.langchain.com/
-#os.environ["LANGCHAIN_TRACING_V2"] = "true"
-#os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
-#os.environ["LANGCHAIN_API_KEY"] = os.getenv('LANGCHAIN_API_KEY')
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
+os.environ["LANGCHAIN_API_KEY"] = os.getenv('LANGCHAIN_API_KEY')
 #Initialize LangSmith client
-#langsmith_client = LangSmithClient()
+langsmith_client = LangSmithClient()
 
 #Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
-
+#initialize the openai model
 if "openai_model" not in st.session_state:
     st.session_state["openai_model"] = "gpt-4o"
 
+#function to convert a sentence to stream
 def get_stream(sentence):
         for word in sentence.split():
             yield word + " "
             time.sleep(0.05)
 
-
+#function to get the dataframe in csv format
 def get_data(placeholder):
     new_data = st.session_state.df.to_csv()
     return new_data
-# Function to generate a random dataframe
 
-
+#function to generate a random dataframe
 def get_dataframe():
     df = pd.DataFrame(
         {
@@ -67,7 +67,11 @@ def get_dataframe():
     )
     return df
 
+
+#function to generate the reponse of the chatbot
 def generate_chatbot_response(openai_client, session_state, user_input):
+
+    #generate the response from openai api
     stream = openai_client.chat.completions.create(
         model=session_state["openai_model"],
         messages=[{"role": "system", "content": "You are a data analysis Copilot that is able to help user to generate report with data analysis in them. you are able to search on internet and you're able to help people to look into the table data from the user. however currently you can only do those if user is sending you a message stating clearly that they like to create a report. if they are not asking you about creating a report please try to answer their questions and explain what you can do to help, and ask them to create a report if that's their goal if you think it is needed"}] +
@@ -93,12 +97,25 @@ def generate_chatbot_response(openai_client, session_state, user_input):
         ],
         tool_choice="auto"
     )
+
     response_message = stream.choices[0].message
+
+    #get the tool calls
     tool_calls = response_message.tool_calls
+
+    #if the tool is called to generated report
     if tool_calls and tool_calls[0].function.name == "trigger_report_generation":
+
+        #display the message when the report is created
         st.write_stream(get_stream("Got it, here is a plan to create report for this request of yours:"))
+
+        #get the dataframe in csv format
         result = get_data(session_state.df)
+
+        #update the current user input
         session_state.current_user_input = user_input
+
+        #generate the plan
         plan = openai_client.chat.completions.create(
             model=session_state["openai_model"],
             messages=[{"role": "user", "content": user_input + """ \n make a plan that is simple to understand without technical terms to create code in python 
@@ -112,21 +129,26 @@ In your output please only give one coherent plan with no analysis
                             """ + "\n this is the data \n" + result}],
             stream=True
         )
+
+        #display the plan
         response = st.write_stream(plan)
+
+        #update the plan
         st.write_stream(get_stream("📝 If you like the plan, please click on 'Execute Plan' button on the 'Plan' tab in the top right panel. Or feel free to ask me to revise the plan in this chat"))
         session_state.plan = response
     else:
         response = st.write_stream(get_stream(stream.choices[0].message.content))
+
     return response
 
 
 def generate_code_for_display_report(execution_agent_response):
      
+     #update the agent thoughtflow(all of steps agent took)
     st.session_state.agent_thoughtflow = "Here is the final output: " + str(execution_agent_response["output"]) + """
 Here is the log of the different step's output, you will be able to find the useful information within there: \n""" + ''.join(str(step[0].log) for step in execution_agent_response["intermediate_steps"])
     
-
-    #st.session_state.code = agent_thoughtflow
+    #generate the code for displaying the report
     code_with_display = openai_client.chat.completions.create(
             model=st.session_state["openai_model"],
             messages = [{"role": "user", "content": """You are creating a report for the user's question: """
@@ -139,8 +161,11 @@ Only respond with code as plain text without code block syntax around it. Again,
     )
 
     return code_with_display
+
 #Functions to execute the plan generated
 def execute_plan(plan):
+
+    #initialize the tools
     ddg_search = DuckDuckGoSearchResults()
     websearch_tool = Tool(
         name="web_search",
@@ -164,7 +189,6 @@ Anything of the part of the code that is todo with searching on the internet ple
 """
     )
 
-    
     tools = [python_repl_tool, websearch_tool]
 
     # This defines the langchain agent's general behavior
@@ -173,37 +197,41 @@ Anything of the part of the code that is todo with searching on the internet ple
     You will trigger the corresponding recommneded tool to execute different parent steps along with its substep in one big step.
     and clearly noting down the results from the each steps.
     """
-# Pull the base prompt
+    # Pull the base prompt
     base_prompt = hub.pull("langchain-ai/openai-functions-template")
     prompt = base_prompt.partial(instructions=instructions)
 
-# Create the agent
-    
+    # Create the agent
     agent = create_openai_functions_agent(ChatOpenAI(temperature=0, openai_api_key=OPENAI_API_KEY), tools, prompt)
 
-# Create the agent executor
+    # Create the agent executor
     agent_executor = AgentExecutor(agent=agent, tools=tools, verbose = True, return_intermediate_steps = True)
 
-# Example input
+    # Example input
     input_data = "execute this plan "+ plan + " with this dataseset "+ st.session_state.df.to_csv()
 
-# Execute the agent
+    # Execute the agent
     response = agent_executor.invoke({"input": input_data})
     
    
-    # print("agent_thoughtflow:", agent_thoughtflow)
-
+    #generate the code for displaying the report
     code_for_displaying_report = generate_code_for_display_report(response)
+    
+    #update the code
     st.session_state.code = code_for_displaying_report.choices[0].message.content
-    #print("new"+new_code)
+    
+    #update the chat history
     st.session_state.messages.append({"role": "assistant", "content": response["output"]})
     st.rerun()
 # Function to handle changes in the editable table
 def handle_table_change():
     st.session_state['table_changed'] = True
 
+#set the page config
 st.set_page_config(layout='wide')
 
+
+#Initialize the state variables
 if "plan" not in st.session_state:
     st.session_state.plan = ""
 if "code" not in st.session_state:
@@ -247,21 +275,23 @@ with st.container():
                     # Append the assistant's response to the chat history
                     st.session_state.messages.append({"role": "assistant", "content": response})
                 
-    
+    #create the second column in first row
     with col2row1:
         with st.container(height=ROW_HIGHT):
+            #create the tabs
             col2row1_plan_tab, col2row1_report_code_tab = st.tabs(["Plan", "Code for Formating the Report"])
+            
+            #display the plan
             with col2row1_plan_tab:
                 st.write(st.session_state.plan)
                 
+                #if the execute button is pressed
                 if st.button("Execute Plan"):
-
                     execute_plan(st.session_state.plan)
-                    # instructions_display = "display the result of the given code using st.write or st.image"
-                    # agent_display = create_openai_functions_agent(ChatOpenAI(temperature=0, OPENAI_API_KEY=OPENAI_API_KEY), tools, prompt)
 
-
+            #display the code for formatting the report
             with col2row1_report_code_tab:
+                #Initialize the format
                 st.write('### Code editor')
                 st.write(st.session_state.agent_thoughtflow) #TODO for Ilya to print this better 
                 THEMES = [
@@ -271,40 +301,43 @@ with st.container():
                 "nord_dark", "pastel_on_dark", "solarized_dark", "solarized_light", "sqlserver", "terminal",
                 "textmate", "tomorrow", "tomorrow_night", "tomorrow_night_blue", "tomorrow_night_bright",
                 "tomorrow_night_eighties", "twilight", "vibrant_ink", "xcode"
-            ]
+                ]
                 KEYBINDINGS = ["emacs", "sublime", "vim", "vscode"]
-
                 reporting_code = st_ace(value=st.session_state.code, language='python', theme='monokai')
-                
-            
-            # Question: how to edit code in here
+    
                 #if the update button is pressed
                 if reporting_code:
                     st.session_state.code  = reporting_code
                     
-            
-                #st.write('Hit `CTRL+ENTER` to refresh')
-                #st.write('*Remember to save your code separately!*')    # Create two columns for the bottom row
+    #create second row
     col1row2, col2row2 = st.columns(2)
-    
+
     # Add editable table to the third quadrant (bottom-left)
     with col1row2:
         with st.container(height=ROW_HIGHT):
             st.write('### User Data Set')
+
+            #if the dataframe is not in the session state
             if 'df' not in st.session_state:
                 st.session_state.df = get_dataframe()
+
+            #display the editable table
             edited_df = st.data_editor(
                 st.session_state.df,
                 key="editable_table",
                 num_rows="dynamic",
                 on_change=handle_table_change
             )
+
+            #update the dataframe
             st.session_state.df = edited_df
     
-    # Add content to the fourth quadrant (bottom-right)
+    #create the fourth column in second row
     with col2row2:
         with st.container(height=ROW_HIGHT):
             st.write("### AI Generated Report")
+
+            #execute the code
             exec(reporting_code)
 
 # Check if the table was changed and send a message in the chatbot
