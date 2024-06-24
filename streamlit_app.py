@@ -31,11 +31,11 @@ TEXTBOX_HIGHT = 90
 # video for how langsmith is used in this demo code: https://share.descript.com/view/k4b3fyvaESB
 # To learn about this: https://youtu.be/tFXm5ijih98
 # To check the running result of langsmith, please go to: https://smith.langchain.com/
-os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
-os.environ["LANGCHAIN_API_KEY"] = os.getenv('LANGCHAIN_API_KEY')
+#os.environ["LANGCHAIN_TRACING_V2"] = "true"
+#os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
+#os.environ["LANGCHAIN_API_KEY"] = os.getenv('LANGCHAIN_API_KEY')
 #Initialize LangSmith client
-langsmith_client = LangSmithClient()
+#langsmith_client = LangSmithClient()
 
 #Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -119,6 +119,85 @@ In your output please only give one coherent plan with no analysis
         response = st.write_stream(get_stream(stream.choices[0].message.content))
     return response
 
+
+def generate_code_for_display_report(execution_agent_response):
+     
+    st.session_state.agent_thoughtflow = "Here is the final output: " + str(execution_agent_response["output"]) + """
+Here is the log of the different step's output, you will be able to find the useful information within there: \n""" + ''.join(str(step[0].log) for step in execution_agent_response["intermediate_steps"])
+    
+
+    #st.session_state.code = agent_thoughtflow
+    code_with_display = openai_client.chat.completions.create(
+            model=st.session_state["openai_model"],
+            messages = [{"role": "user", "content": """You are creating a report for the user's question: """
+            + st.session_state.current_user_input 
+            + """use st.write or st.image to display the result of the given thoughtflow of an agent that already did all the calculation needed to answer the question: \n\n\n------------------------\n"""
+            + st.session_state.agent_thoughtflow+"""
+\n\n\n------------------------\nNote that all the results are already in the thoughtflow, you just need to print them out rather than trying to recalculate them.
+Only respond with code as plain text without code block syntax around it. Again, do not write code to do any calculation. you are only here to print the results from the above thought flow"""}],
+            
+    )
+
+    return code_with_display
+#Functions to execute the plan generated
+def execute_plan(plan):
+    ddg_search = DuckDuckGoSearchResults()
+    websearch_tool = Tool(
+        name="web_search",
+        func=ddg_search.run,
+            description="Useful for when you need to answer questions about current events or the current state of the world, by searching on internet"
+    )
+
+    # Initialize the Python REPL tool
+    python_repl_tool = PythonREPLTool(
+        name="python_repl_tool",
+        description="""
+You are an agent designed to write and execute python code to answer questions.
+You have access to a python REPL, which you can use to execute python code.
+If you get an error, debug your code and try again.
+Only use the output of your code to answer the question.
+You might know the answer without running any code, but you should still run the code to get the answer.
+If it does not seem like you can write code to answer the question, just return "I don't know" as the answer.
+if you are ask to plot data, save the plot as "plot.png", and log the name of the image. 
+You can use st.write("your answer") to display the answer if you are asked to calculate something.
+Anything of the part of the code that is todo with searching on the internet please do not write code for it. just skip it and write a comment as a placeholder
+"""
+    )
+
+    
+    tools = [python_repl_tool, websearch_tool]
+
+    # This defines the langchain agent's general behavior
+    instructions = """
+    You will receive an instruction with different sub steps under the parent steps, each parent step will have recommneded tools for you to use.
+    You will trigger the corresponding recommneded tool to execute different parent steps along with its substep in one big step.
+    and clearly noting down the results from the each steps.
+    """
+# Pull the base prompt
+    base_prompt = hub.pull("langchain-ai/openai-functions-template")
+    prompt = base_prompt.partial(instructions=instructions)
+
+# Create the agent
+    
+    agent = create_openai_functions_agent(ChatOpenAI(temperature=0, openai_api_key=OPENAI_API_KEY), tools, prompt)
+
+# Create the agent executor
+    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose = True, return_intermediate_steps = True)
+
+# Example input
+    input_data = "execute this plan "+ plan + " with this dataseset "+ st.session_state.df.to_csv()
+
+# Execute the agent
+    response = agent_executor.invoke({"input": input_data})
+    
+   
+    # print("agent_thoughtflow:", agent_thoughtflow)
+
+    code_for_displaying_report = generate_code_for_display_report(response)
+    st.session_state.code = code_for_displaying_report.choices[0].message.content
+    #print("new"+new_code)
+    st.session_state.messages.append({"role": "assistant", "content": response["output"]})
+    st.rerun()
 # Function to handle changes in the editable table
 def handle_table_change():
     st.session_state['table_changed'] = True
@@ -177,77 +256,7 @@ with st.container():
                 
                 if st.button("Execute Plan"):
 
-                    ddg_search = DuckDuckGoSearchResults()
-                    websearch_tool = Tool(
-                        name="web_search",
-                        func=ddg_search.run,
-                         description="Useful for when you need to answer questions about current events or the current state of the world, by searching on internet"
-                 )
-
-                 # Initialize the Python REPL tool
-                    python_repl_tool = PythonREPLTool(
-                        name="python_repl_tool",
-                        description="""
-You are an agent designed to write and execute python code to answer questions.
-You have access to a python REPL, which you can use to execute python code.
-If you get an error, debug your code and try again.
-Only use the output of your code to answer the question.
-You might know the answer without running any code, but you should still run the code to get the answer.
-If it does not seem like you can write code to answer the question, just return "I don't know" as the answer.
-if you are ask to plot data, save the plot as "plot.png", and log the name of the image. 
-You can use st.write("your answer") to display the answer if you are asked to calculate something.
-Anything of the part of the code that is todo with searching on the internet please do not write code for it. just skip it and write a comment as a placeholder
-"""
-                    )
-
-                    
-                    tools = [python_repl_tool, websearch_tool]
-
-                    # This defines the langchain agent's general behavior
-                    instructions = """
-                    You will receive an instruction with different sub steps under the parent steps, each parent step will have recommneded tools for you to use.
-                    You will trigger the corresponding recommneded tool to execute different parent steps along with its substep in one big step.
-                    and clearly noting down the results from the each steps.
-                    """
-# Pull the base prompt
-                    base_prompt = hub.pull("langchain-ai/openai-functions-template")
-                    prompt = base_prompt.partial(instructions=instructions)
-
-# Create the agent
-                    
-                    agent = create_openai_functions_agent(ChatOpenAI(temperature=0, openai_api_key=OPENAI_API_KEY), tools, prompt)
-
-# Create the agent executor
-                    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose = True, return_intermediate_steps = True)
-
-# Example input
-                    input_data = "execute this plan "+ st.session_state.plan + " with this dataseset "+ st.session_state.df.to_csv()
-
-# Execute the agent
-                    response = agent_executor.invoke({"input": input_data})
-                    
-                    st.session_state.agent_thoughtflow = "Here is the final output: " + str(response["output"]) + """
- Here is the log of the different step's output, you will be able to find the useful information within there: \n""" + ''.join(str(step[0].log) for step in response["intermediate_steps"])
-                    
-
-                    #st.session_state.code = agent_thoughtflow
-                    code_with_display = openai_client.chat.completions.create(
-                            model=st.session_state["openai_model"],
-                            messages = [{"role": "user", "content": """You are creating a report for the user's question: """
-                            + st.session_state.current_user_input 
-                            + """use st.write or st.image to display the result of the given thoughtflow of an agent that already did all the calculation needed to answer the question: \n\n\n------------------------\n"""
-                            + st.session_state.agent_thoughtflow+"""
-\n\n\n------------------------\nNote that all the results are already in the thoughtflow, you just need to print them out rather than trying to recalculate them.
-Only respond with code as plain text without code block syntax around it. Again, do not write code to do any calculation. you are only here to print the results from the above thought flow"""}],
-                            
-                    )
-                    # print("agent_thoughtflow:", agent_thoughtflow)
-
-                    
-                    st.session_state.code = code_with_display.choices[0].message.content
-                    #print("new"+new_code)
-                    st.session_state.messages.append({"role": "assistant", "content": response["output"]})
-                    st.rerun()
+                    execute_plan(st.session_state.plan)
                     # instructions_display = "display the result of the given code using st.write or st.image"
                     # agent_display = create_openai_functions_agent(ChatOpenAI(temperature=0, OPENAI_API_KEY=OPENAI_API_KEY), tools, prompt)
 
