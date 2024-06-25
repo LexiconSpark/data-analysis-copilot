@@ -3,6 +3,7 @@ import pandas as pd
 import random
 import time
 import os
+from io import StringIO
 from dotenv import load_dotenv
 from langchain import hub
 from langchain.agents import AgentExecutor
@@ -137,13 +138,13 @@ def generate_chatbot_response(openai_client, session_state, user_input):
                 "type": "function",
                 "function": {
                     "name": "simple_data_analysis",
-                    "description": "Trigger this function when the user ask simple calculation about the dataset like calculating the mean of a column or the correlation between two columns, what are the elements in the dataset, what is the max/min value etc",
+                    "description": "Trigger this function when the user ask simple calculation or question about the dataset like calculating the mean of a column or the correlation between two columns, what are the elements in the dataset or what is in a specific columnn or row, what is the max/min value etc",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "user_message": {
                                 "type": "string",
-                                "description": "The user's message asking about simple question about the dataset like calculating the mean of a column or the correlation between two columns, what are the elements in the dataset, etc",
+                                "description": "The user's message asking about simple calculation or question about the dataset like calculating the mean of a column or the correlation between two columns, what are the elements in the dataset, etc",
                             }
                         },
                         "required": ["user_message"],
@@ -214,7 +215,7 @@ In your output please only give one coherent plan with no analysis
     elif tool_calls and tool_calls[0].function.name == "simple_data_analysis":
         
         #call the data agent
-        data_agent = create_pandas_dataframe_agent(ChatOpenAI(temperature=0,api_key= "sk-proj-pPMRDpoxQeXFmBk1HGmRT3BlbkFJRPax8CTo4YfwzzgmCXJD"), st.session_state.df, verbose=True)
+        data_agent = create_pandas_dataframe_agent(ChatOpenAI(temperature=0,api_key= OPENAI_API_KEY), st.session_state.df, verbose=True)
 
         #generate response
         answer = data_agent.invoke(user_input)["output"]
@@ -499,6 +500,16 @@ with st.container():
             # update the dataframe
             st.session_state.df = edited_df
 
+            #button to upload file
+            uploaded_file = st.file_uploader("Choose a file")
+
+            #if file is uploaded
+            if uploaded_file is not None:
+                st.session_state.df = pd.read_csv(uploaded_file)
+            
+            #submit the file
+            if st.button("Submit"):
+                st.rerun()
     # create the fourth column in second row
     with col2row2:
         with st.container(height=ROW_HIGHT):
