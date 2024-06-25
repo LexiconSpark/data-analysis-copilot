@@ -14,6 +14,7 @@ from langchain.tools import Tool
 from langchain_community.tools import DuckDuckGoSearchResults
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import LLMMathChain
+from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
 
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_openai_functions_agent
@@ -27,20 +28,30 @@ from openai import OpenAI
 load_dotenv()
 ROW_HIGHT = 600
 TEXTBOX_HIGHT = 90
+
+
+
+def initialize_environment():
+    load_dotenv()
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
+    os.environ["LANGCHAIN_API_KEY"] = os.getenv('LANGCHAIN_API_KEY')
+    return LangSmithClient(), OpenAI(api_key=os.getenv("OPENAI_API_KEY")), os.getenv("OPENAI_API_KEY")
 ## using langsmith 
 # video for how langsmith is used in this demo code: https://share.descript.com/view/k4b3fyvaESB
 # To learn about this: https://youtu.be/tFXm5ijih98
 # To check the running result of langsmith, please go to: https://smith.langchain.com/
-os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
-os.environ["LANGCHAIN_API_KEY"] = os.getenv('LANGCHAIN_API_KEY')
+#os.environ["LANGCHAIN_TRACING_V2"] = "true"
+#os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
+#os.environ["LANGCHAIN_API_KEY"] = os.getenv('LANGCHAIN_API_KEY')
 #Initialize LangSmith client
-langsmith_client = LangSmithClient()
+
 
 #Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
+
+
+langsmite_clien, openai_client, OPENAI_API_KEY = initialize_environment()
 #initialize the openai model
 if "openai_model" not in st.session_state:
     st.session_state["openai_model"] = "gpt-4o"
@@ -75,26 +86,46 @@ def generate_chatbot_response(openai_client, session_state, user_input):
     stream = openai_client.chat.completions.create(
         model=session_state["openai_model"],
         messages=[{"role": "system", "content": """You are a data analysis Copilot that is able to help user to generate report with data analysis in them. you are able to search on internet and you're able to help people to look into the table data from the user. however currently you can only do those if user is sending you a message stating clearly that they like to create a report. if they are not asking you about creating a report please try to answer their questions and explain what you can do to help, and ask them to create a report if that's their goal if you think it is needed, 
-                   for example, create a report of column B and column C and caluclate the correlation between the two columns"""}] +
+                   #for example, create a report of column B and column C and caluclate the correlation between the two columns"""}] +
         [{"role": m["role"], "content": m["content"]} for m in session_state.messages],
+
         tools=[
             {
                 "type": "function",
                 "function": {
                     "name": "trigger_report_generation",
-                    "description": "Trigger this function when user asks about creating a report",
+                    "description": "Trigger this function when user asks about creating a report or any calculation to do with the existing dataset",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "user_message": {
                                 "type": "string",
-                                "description": "The user's message asking about creating a report",
+                                "description": "The user's message asking about creating a report or any calculation to do with the existing dataset",
+                            }
+                        },
+                        "required": ["user_message"],
+                    },
+                }
+            },
+
+                        {
+                "type": "function",
+                "function": {
+                    "name": "simple_data_analysis",
+                    "description": "Trigger this function when the user ask simple calculation about the dataset like calculating the mean of a column or the correlation between two columns, what are the elements in the dataset, what is the max/min value etc",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "user_message": {
+                                "type": "string",
+                                "description": "The user's message asking about simple question about the dataset like calculating the mean of a column or the correlation between two columns, what are the elements in the dataset, etc",
                             }
                         },
                         "required": ["user_message"],
                     },
                 }
             }
+    
         ],
         tool_choice="auto"
     )
@@ -137,6 +168,24 @@ In your output please only give one coherent plan with no analysis
         #update the plan
         st.write_stream(get_stream("📝 If you like the plan, please click on 'Execute Plan' button on the 'Plan' tab in the top right panel. Or feel free to ask me to revise the plan in this chat"))
         session_state.plan = response
+
+    #if a simple data question is asked
+    elif tool_calls and tool_calls[0].function.name == "simple_data_analysis":
+        
+        #call the data agent
+        data_agent = create_pandas_dataframe_agent(ChatOpenAI(temperature=0,api_key= "sk-proj-pPMRDpoxQeXFmBk1HGmRT3BlbkFJRPax8CTo4YfwzzgmCXJD"), st.session_state.df, verbose=True)
+
+        #generate response
+        answer = data_agent.invoke(user_input)["output"]
+
+        asnwer_reported = openai_client.chat.completions.create(
+            model=session_state["openai_model"],
+            messages=[{"role": "user", "content": "Based on the following answer, " + answer + " answer this question with a simple sentence" + user_input}],
+            stream=True
+        )
+
+        response = st.write_stream(asnwer_reported)
+
     else:
         response = st.write_stream(get_stream(stream.choices[0].message.content))
 
