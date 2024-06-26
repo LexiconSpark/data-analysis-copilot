@@ -1,7 +1,7 @@
 ---
 name: Feature Build
 about: The information about the feature
-title: "[Feature]"
+title: "[Feature] Your Feature's Title"
 labels: ''
 assignees: ''
 
@@ -10,13 +10,12 @@ assignees: ''
 ### Description
 
 ### Requirements
-- 
-- 
+- [ ] 
+- [ ] 
 
 ### Implementation Plan
-1. 
-2. 
-
+- 
+- 
 ### Dependencies (optional)
 
 ### Additional Notes
