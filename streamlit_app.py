@@ -214,10 +214,15 @@ Anything of the part of the code that is todo with searching on the internet ple
     )
 
     # building the input data
+    # Milestone #2: Pass the schema of the table and the name of dataframe into the langchain agents to allow langchain agent to create the code to manipulate dataframe
+    # building the input data
     input_data = (
         "execute this plan "
         + plan
-        + " with this dataseset "
+        + " with table name 'df' "
+        + " with this table schema "
+        + str(st.session_state.table_schema)
+        + " with this dataset "
         + st.session_state.df.to_csv()
     )
 
@@ -249,7 +254,7 @@ def format_intermediate_steps(response):
         tool_input = step[0].tool_input
         log = step[0].log.strip()
         formatted_output += f"Invoked `{tool}` with: \n```python\n\n{tool_input}\n```\n\n"
-    formatted_output += f"Final Output: \n `{response["output"]}`"
+    formatted_output += f'Final Output: \n `{response["output"]}`'
     return formatted_output
 
 # Function to generate code that is used to display the information within the report
@@ -295,6 +300,12 @@ st.write("There is no report created yet, please ask the chatbot to create a rep
 """
 if "thoughtflow" not in st.session_state:
     st.session_state.agent_thoughtflow = ""
+
+# Milestone #1: Extract schema of the table and store in a streamlit state variable
+df = get_dataframe()
+if "table_schema" not in st.session_state:
+    schema = {col: str(df[col].dtype) for col in df.columns}
+    st.session_state.table_schema = schema
 
 # Below is a method for creating a state variable that auto refreshes on the frontend as the value changes, without the need to manually do st.rerun()
 # Be careful with using it since it uses the special session_state_auto variable, as it could trigger st.rerun() within it and sometimes interrupt other steps.
