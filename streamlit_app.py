@@ -132,26 +132,7 @@ def generate_chatbot_response(openai_client, session_state, user_input):
                         "required": ["user_message"],
                     },
                 }
-            },
-
-                        {
-                "type": "function",
-                "function": {
-                    "name": "simple_data_analysis",
-                    "description": "Trigger this function when the user ask simple calculation or question about the dataset like calculating the mean of a column or the correlation between two columns, what are the elements in the dataset or what is in a specific columnn or row, what is the max/min value etc",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "user_message": {
-                                "type": "string",
-                                "description": "The user's message asking about simple calculation or question about the dataset like calculating the mean of a column or the correlation between two columns, what are the elements in the dataset, etc",
-                            }
-                        },
-                        "required": ["user_message"],
-                    },
-                },
             }
-    
         ],
         tool_choice="auto",
     )
