@@ -8,6 +8,12 @@
     ```  
     OPENAI_API_KEY="REPLACE THIS WITH YOUR OPENAI API KEY FROM https://platform.openai.com/api-keys"
     ```
+ - In order to  trans html or markdown into pdf, install wkhtmltox and add following code into .py file
+      ```
+      config = pdfkit.configuration(wkhtmltopdf=r'replace with your wkhtmltopdf.exe file path. ')
+      #EXAMPLE: 
+      #config = pdfkit.configuration(wkhtmltopdf=r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe')
+      ```
 
  - Optional improvement if you like to overserve your langchain agent activities in more details
    - add this into the .env file
