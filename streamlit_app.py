@@ -44,10 +44,12 @@ def initialize_environment():
 # video for how langsmith is used in this demo code: https://share.descript.com/view/k4b3fyvaESB
 # To learn about this: https://youtu.be/tFXm5ijih98
 # To check the running result of langsmith, please go to: https://smith.langchain.com/
-#os.environ["LANGCHAIN_TRACING_V2"] = "true"
-#os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
-#os.environ["LANGCHAIN_API_KEY"] = os.getenv('LANGCHAIN_API_KEY')
+# os.environ["LANGCHAIN_TRACING_V2"] = "true"
+# os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
+# os.environ["LANGCHAIN_API_KEY"] = os.getenv('LANGCHAIN_API_KEY')
 #Initialize LangSmith client
+
+# langsmith_client = LangSmithClient()
 
 
 #Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
@@ -164,12 +166,12 @@ def generate_chatbot_response(openai_client, session_state, user_input):
                 {
                     "role": "user",
                     "content": user_input
-                    + """ \n make a plan that is simple to understand without technical terms to create code in python 
+                    + """ \n make a simple plan that is simple to understand without technical terms to create code in python 
 to analyze this data(do not include the code), only include the plan as list of steps in the output. 
-At the same time, you are also given a list of tools, they are python_repl_tool for writing code, and another one is called web_search for searching on the web. 
+At the same time, you are also given a list of tools, they are python_repl_tool for writing code, and another one is called web_search for searching on the web for knowledge you do not know. 
 Please assign the right tool to do each step, knowing the tools that got activated later will know the output of the previous tools. 
 the plan can be hierarchical, meaning that when multiple related and consecutive step can be grouped in one big step and be achieve by the same tool,
-you can group under a parent step and have them as sub-steps and only mention the tool recommended for the partent step. 
+you can group under a parent step and have them as sub-steps and only mention the tool recommended for the partent step. try to limit your parent step to be less than 5 steps. 
 At the each parent step of the plan, please indicate the tool you recommend in a [] such as [Tool: web_search], and put it at the begining of that step. Do not indicate the tool recommendation for sub-steps
 In your output please only give one coherent plan with no analysis
                             """
@@ -250,9 +252,10 @@ If you get an error, debug your code and try again.
 Only use the output of your code to answer the question.
 You might know the answer without running any code, but you should still run the code to get the answer.
 If it does not seem like you can write code to answer the question, just return "I don't know" as the answer.
-if you are ask to plot data, save the plot as "plot.png", and log the name of the image. 
+if you are ask to plot data, save the plot as "plot.png", and log the name of the image.
+Note that you only have python libaraies including Pandas, NumPy, Matplotlib, Math. Do not use any other libaraies
 You can use st.write("your answer") to display the answer if you are asked to calculate something.
-Anything of the part of the code that is todo with searching on the internet please do not write code for it. just skip it and write a comment as a placeholder
+Anything of the part of the code that is todo with searching on the internet please do not write code for it. just skip it and write a comment as a placeholder.
 """,
     )
 
