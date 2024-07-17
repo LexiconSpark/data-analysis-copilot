@@ -32,32 +32,35 @@ ROW_HIGHT = 600
 TEXTBOX_HIGHT = 90
 
 
-
-
 def initialize_environment():
     load_dotenv()
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
     os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
-    os.environ["LANGCHAIN_API_KEY"] = os.getenv('LANGCHAIN_API_KEY')
-    return LangSmithClient(), OpenAI(api_key=os.getenv("OPENAI_API_KEY")), os.getenv("OPENAI_API_KEY")
-## using langsmith 
+    os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
+    return (
+        LangSmithClient(),
+        OpenAI(api_key=os.getenv("OPENAI_API_KEY")),
+        os.getenv("OPENAI_API_KEY"),
+    )
+
+
+## using langsmith
 # video for how langsmith is used in this demo code: https://share.descript.com/view/k4b3fyvaESB
 # To learn about this: https://youtu.be/tFXm5ijih98
 # To check the running result of langsmith, please go to: https://smith.langchain.com/
 # os.environ["LANGCHAIN_TRACING_V2"] = "true"
 # os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
 # os.environ["LANGCHAIN_API_KEY"] = os.getenv('LANGCHAIN_API_KEY')
-#Initialize LangSmith client
+# Initialize LangSmith client
 
 # langsmith_client = LangSmithClient()
 
 
-#Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
-
+# Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
 
 
 langsmite_clien, openai_client, OPENAI_API_KEY = initialize_environment()
-#initialize the openai model
+# initialize the openai model
 
 
 # Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
@@ -68,6 +71,7 @@ openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 if "openai_model" not in st.session_state:
     st.session_state["openai_model"] = "gpt-4o"
+
 
 # function to convert a sentence to stream
 def get_stream(sentence):
@@ -93,12 +97,14 @@ def get_dataframe():
     )
     return df
 
+
 # This is the function for handling changes in csv
 def handle_table_change():
     if "table_changed" in st.session_state and st.session_state["table_changed"]:
         st.session_state["chat_history"].append(
             {"role": "bot", "content": "A change was made to the table."}
         )
+
 
 # function to generate the reponse of the chatbot
 def generate_chatbot_response(openai_client, session_state, user_input):
@@ -132,7 +138,7 @@ def generate_chatbot_response(openai_client, session_state, user_input):
                         },
                         "required": ["user_message"],
                     },
-                }
+                },
             }
         ],
         tool_choice="auto",
@@ -193,34 +199,64 @@ In your output please only give one coherent plan with no analysis
         )
         session_state.plan = response
 
-    #if a simple data question is asked
+    # if a simple data question is asked
     elif tool_calls and tool_calls[0].function.name == "simple_data_analysis":
-        
-        #call the data agent
-        data_agent = create_pandas_dataframe_agent(ChatOpenAI(temperature=0,api_key= "sk-proj-pPMRDpoxQeXFmBk1HGmRT3BlbkFJRPax8CTo4YfwzzgmCXJD"), st.session_state.df, verbose=True)
 
-        #generate response
+        # call the data agent
+        data_agent = create_pandas_dataframe_agent(
+            ChatOpenAI(
+                temperature=0,
+                api_key="sk-proj-pPMRDpoxQeXFmBk1HGmRT3BlbkFJRPax8CTo4YfwzzgmCXJD",
+            ),
+            st.session_state.df,
+            verbose=True,
+        )
+
+        # generate response
         answer = data_agent.invoke(user_input)["output"]
 
         asnwer_reported = openai_client.chat.completions.create(
             model=session_state["openai_model"],
-            messages=[{"role": "user", "content": "Based on the following answer, " + answer + " answer this question with a simple sentence" + user_input}],
-            stream=True
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Based on the following answer, "
+                    + answer
+                    + " answer this question with a simple sentence"
+                    + user_input,
+                }
+            ],
+            stream=True,
         )
 
         response = st.write_stream(asnwer_reported)
     elif tool_calls and tool_calls[0].function.name == "simple_data_analysis":
-        
-        #call the data agent
-        data_agent = create_pandas_dataframe_agent(ChatOpenAI(temperature=0,api_key= "sk-proj-pPMRDpoxQeXFmBk1HGmRT3BlbkFJRPax8CTo4YfwzzgmCXJD"), st.session_state.df, verbose=True)
 
-        #generate response
+        # call the data agent
+        data_agent = create_pandas_dataframe_agent(
+            ChatOpenAI(
+                temperature=0,
+                api_key="sk-proj-pPMRDpoxQeXFmBk1HGmRT3BlbkFJRPax8CTo4YfwzzgmCXJD",
+            ),
+            st.session_state.df,
+            verbose=True,
+        )
+
+        # generate response
         answer = data_agent.invoke(user_input)["output"]
 
         asnwer_reported = openai_client.chat.completions.create(
             model=session_state["openai_model"],
-            messages=[{"role": "user", "content": "Based on the following answer, " + answer + " answer this question with a simple sentence" + user_input}],
-            stream=True
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Based on the following answer, "
+                    + answer
+                    + " answer this question with a simple sentence"
+                    + user_input,
+                }
+            ],
+            stream=True,
         )
 
         response = st.write_stream(asnwer_reported)
@@ -297,16 +333,17 @@ Anything of the part of the code that is todo with searching on the internet ple
 
     # update the code
     st.session_state.code = code_for_displaying_report.choices[0].message.content
-        
+
     # update the chat history
     st.session_state.messages.append(
         {"role": "assistant", "content": response["output"]}
     )
-    
+
     # format the agent intermediate steps, having this step at the botton of the function because it uses the special session_state_auto variable, as it could trigger st.rerun() within it and sometimes interrupt other steps.
     session_state_auto.formatted_output = format_intermediate_steps(response)
 
     st.rerun()
+
 
 # Function to format the intermediate steps from the agent for display
 def format_intermediate_steps(response):
@@ -316,9 +353,12 @@ def format_intermediate_steps(response):
         tool = step[0].tool
         tool_input = step[0].tool_input
         log = step[0].log.strip()
-        formatted_output += f"Invoked `{tool}` with: \n```python\n\n{tool_input}\n```\n\n"
-    formatted_output += f"Final Output: \n `{response["output"]}`"
+        formatted_output += (
+            f"Invoked `{tool}` with: \n```python\n\n{tool_input}\n```\n\n"
+        )
+    formatted_output += f"Final Output: \n `{response['output']}`"
     return formatted_output
+
 
 # Function to generate code that is used to display the information within the report
 def generate_code_for_display_report(execution_agent_response):
@@ -364,6 +404,7 @@ st.write("There is no report created yet, please ask the chatbot to create a rep
 if "thoughtflow" not in st.session_state:
     st.session_state.agent_thoughtflow = ""
 
+
 # Below is a method for creating a state variable that auto refreshes on the frontend as the value changes, without the need to manually do st.rerun()
 # Be careful with using it since it uses the special session_state_auto variable, as it could trigger st.rerun() within it and sometimes interrupt other steps.
 # Find the tutorial of implimentation here: https://discuss.streamlit.io/t/i-created-way-simpler-cleaner-session-state-code-with-auto-refresh/36150
@@ -372,8 +413,11 @@ class SessionStateAutoClass:
         if getattr(self, name, None) != value:
             st.session_state[name] = value
             st.rerun()
+
     def __getattr__(self, name):
         return st.session_state.get(name, None)
+
+
 session_state_auto = SessionStateAutoClass()
 
 # Initialize session_state_auto.formatted_output as a state variable that auto refreshes on the frontend
@@ -449,9 +493,9 @@ with st.container():
             with col2row1_code_tab:
                 # print out the intermediate steps
                 st.write(session_state_auto.formatted_output)
-                
+
                 # Display code for visualizating report
-                st.write("### Code For Visualizing Report")  
+                st.write("### Code For Visualizing Report")
                 reporting_code = st_ace(
                     value=st.session_state.code, language="python", theme="monokai"
                 )
@@ -490,4 +534,3 @@ with st.container():
 
             # execute the code
             exec(reporting_code)
-
