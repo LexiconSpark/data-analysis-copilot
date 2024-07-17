@@ -36,38 +36,14 @@ def initialize_environment():
     load_dotenv()
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
     os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
-    # os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
     return (
-        LangSmithClient(),
         OpenAI(api_key=os.getenv("OPENAI_API_KEY")),
         os.getenv("OPENAI_API_KEY"),
     )
 
 
-## using langsmith
-# video for how langsmith is used in this demo code: https://share.descript.com/view/k4b3fyvaESB
-# To learn about this: https://youtu.be/tFXm5ijih98
-# To check the running result of langsmith, please go to: https://smith.langchain.com/
-# os.environ["LANGCHAIN_TRACING_V2"] = "true"
-# os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
-# os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
-# # Initialize LangSmith client
-
-# langsmith_client = LangSmithClient()
-
-
 # Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
-
-
-langsmite_clien, openai_client, OPENAI_API_KEY = initialize_environment()
-# initialize the openai model
-
-
-# Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
-
-# initialize the openai model
+openai_client, OPENAI_API_KEY = initialize_environment()
 
 if "openai_model" not in st.session_state:
     st.session_state["openai_model"] = "gpt-4o"
