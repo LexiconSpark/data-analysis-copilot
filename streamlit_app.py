@@ -36,7 +36,7 @@ def initialize_environment():
     load_dotenv()
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
     os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
-    os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
+    # os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
     return (
         LangSmithClient(),
         OpenAI(api_key=os.getenv("OPENAI_API_KEY")),
@@ -50,8 +50,8 @@ def initialize_environment():
 # To check the running result of langsmith, please go to: https://smith.langchain.com/
 # os.environ["LANGCHAIN_TRACING_V2"] = "true"
 # os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
-# os.environ["LANGCHAIN_API_KEY"] = os.getenv('LANGCHAIN_API_KEY')
-# Initialize LangSmith client
+# os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGCHAIN_API_KEY")
+# # Initialize LangSmith client
 
 # langsmith_client = LangSmithClient()
 
