@@ -1,3 +1,62 @@
+"""
+Data Analysis Copilot: An Interactive Streamlit Application
+
+This Streamlit-based application serves as a "Data Analysis Copilot" to assist users with generating data analysis reports,
+creating visualizations, and enabling chatbot-like interactions for guidance. The app incorporates AI capabilities 
+via OpenAI's GPT models and tools from LangChain to facilitate data exploration, report generation, and automated insights.
+
+Key Features:
+1. **Chatbot Integration**:
+    - Provides a conversational interface for users to interact with the app.
+    - Users can ask questions about the dataset or request specific analysis tasks.
+
+2. **Plan and Code Generation**:
+    - AI generates step-by-step plans for analyzing datasets based on user input.
+    - Code for report visualization and analysis is dynamically generated and editable.
+
+3. **Editable Data Table**:
+    - Allows users to view and modify their dataset interactively using Streamlit's `st.data_editor`.
+
+4. **Data Visualization**:
+    - Automatically generates plots and visualizations based on the user's instructions.
+
+5. **Report Execution and Display**:
+    - Executes AI-generated plans to produce formatted reports.
+    - Displays intermediate steps and final output, offering transparency into the process.
+
+Modules and Libraries Used:
+- **Streamlit**: For building the user interface and interactive elements.
+- **LangChain**: For integrating AI tools and agents.
+- **Pandas**: For data manipulation and processing.
+- **Matplotlib**: For creating visualizations.
+- **OpenAI**: For leveraging GPT models to generate plans and insights.
+- **dotenv**: For securely loading environment variables.
+- **DuckDuckGo Search API**: For accessing real-time web search results.
+
+How to Use:
+1. Start the application by running the script with Streamlit:
+    ```
+    streamlit run script_name.py
+    ```
+2. Upload or modify your dataset in the editable table.
+3. Use the chatbot to ask questions or request analysis.
+4. View AI-generated plans, intermediate steps, and Python code for customization.
+5. Execute plans to generate visualizations and reports, which are displayed in real-time.
+
+Prerequisites:
+- Install required dependencies with:
+    ```
+    pip install -r requirements.txt
+    ```
+- Set up your `.env` file with the OpenAI API key:
+    ```
+    OPENAI_API_KEY=your_openai_api_key
+    ```
+
+Author:
+Ti Guo
+"""
+
 import streamlit as st
 import pandas as pd
 import random
