@@ -30,13 +30,22 @@ from docx.shared import Inches
 
 import time
 
-
 def safe_list_get(l, idx, default):
-  try:
-    return l[idx]
-  except IndexError:
-    return default
-    
+    """
+    Safely retrieves an element from a list by index.
+
+    Parameters:
+    l (list): The list to retrieve the element from.
+    idx (int): The index of the element to retrieve.
+    default: The value to return if the index is out of bounds.
+
+    Returns:
+    The element at the specified index if it exists; otherwise, the default value.
+    """
+    try:
+        return l[idx]
+    except IndexError:
+        return default
 
 # Load environment variables from .env file
 load_dotenv()
