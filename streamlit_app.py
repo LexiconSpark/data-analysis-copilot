@@ -1,3 +1,52 @@
+"""
+CSV Report Generator with AI-Powered Analysis and Visualization
+
+This Streamlit app allows users to upload CSV files, process the data using AI, 
+generate insightful analysis, and create visualizations based on user-defined prompts. 
+The app also provides the option to download a formatted Word document containing 
+analysis results and plots.
+
+Key Features:
+1. **File Upload**:
+    - Users can upload a CSV file for analysis.
+    
+2. **AI Schema Analysis**:
+    - Automatically infers and displays the schema of the uploaded CSV using a pre-defined agent.
+
+3. **Data Filtering and Transformation**:
+    - Users can provide custom prompts to filter and process the data, and AI generates Python code to apply the transformations.
+
+4. **Data Visualization**:
+    - Plots temperature and vibration data from the uploaded CSV with dual y-axes for better readability.
+
+5. **AI-Powered Data Analysis**:
+    - Automatically generates text-based analysis of trends and relationships in the data.
+
+6. **Word Document Export**:
+    - Users can download a Word document summarizing the analysis, including visualizations and observations.
+
+Modules and Libraries Used:
+- **Streamlit**: For building the user interface.
+- **pdfplumber**: (Future functionality) For extracting instructions from PDF documents.
+- **LangChain**: For utilizing OpenAI APIs for schema analysis and data processing.
+- **Matplotlib**: For generating data visualizations.
+- **Pandas**: For reading and manipulating CSV data.
+- **python-docx**: For creating downloadable Word documents with analysis and visualizations.
+
+How to Use:
+1. Upload a CSV file using the file uploader widget.
+2. Enter a prompt for desired analysis and chart generation.
+3. Click the "Generate Analysis Charts" button to filter the data and create visualizations.
+4. Review the AI-generated analysis and download the summary report as a Word document.
+
+Note:
+Make sure to set up your `.env` file with your OpenAI API key before running the app.
+
+Author:
+Ti Guo
+
+"""
+
 import streamlit as st
 import pdfplumber
 
