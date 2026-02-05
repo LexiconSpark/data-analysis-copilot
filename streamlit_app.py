@@ -92,7 +92,7 @@ def generate_chatbot_response(openai_client, session_state, user_input):
             {
                 "role": "system",
                 "content": """You are a data analysis Copilot that is able to help user to generate report with data analysis in them. you are able to search on internet and you're able to help people to look into the table data from the user. however currently you can only do those if user is sending you a message stating clearly that they like to create a report. if they are not asking you about creating a report please try to answer their questions and explain what you can do to help, and ask them to create a report if that's their goal if you think it is needed, 
-                   for example, create a report of column B and column C and caluclate the correlation between the two columns""",
+                for example, create a report of column B and column C and caluclate the correlation between the two columns""",
             }
         ]
         + [
