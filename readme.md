@@ -12,7 +12,7 @@
  - Optional improvement if you like to overserve your langchain agent activities in more details
    - add this into the .env file
       ```
-      LANGCHAIN_API_KEY="(Optional) REPLACE THIS WITH YOUR LANGSMITH API KEY FROM https://smith.langchain.com > go to SETTINGS > API Keys"
+      LANGSMITH_API_KEY="(Optional) REPLACE THIS WITH YOUR LANGSMITH API KEY FROM https://smith.langchain.com > go to SETTINGS > API Keys"
       ```
    - and add this into the streamlit_app.py file
       ```
