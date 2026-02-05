@@ -1,4 +1,7 @@
+# Local env and secrets (do not commit)
 .env
+.env.*
+venv
 *.png
 .aider.*
 .streamlit
