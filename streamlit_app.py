@@ -14,7 +14,7 @@ from langchain.tools import Tool
 from langchain_community.tools import DuckDuckGoSearchResults
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import LLMMathChain
-
+import langsmith
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
 
 
@@ -34,16 +34,20 @@ TEXTBOX_HIGHT = 90
 
 def initialize_environment():
     load_dotenv()
-    os.environ["LANGCHAIN_TRACING_V2"] = "true"
-    os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
+    os.environ["LANGSMITH_PROJECT"] = "data_analysis_copilot"
+    os.environ["LANGSMITH_TRACING"] = "true"  # enable tracing
+    os.environ["LANGSMITH_API_KEY"] = os.getenv("LANGSMITH_API_KEY")
+    os.environ["LANGSMITH_ENDPOINT"] = "https://api.smith.langchain.com"
     return (
+        LangSmithClient(),
         OpenAI(api_key=os.getenv("OPENAI_API_KEY")),
         os.getenv("OPENAI_API_KEY"),
     )
 
 
 # Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
-openai_client, OPENAI_API_KEY = initialize_environment()
+langsmith_client, openai_client, OPENAI_API_KEY = initialize_environment()
+
 
 if "openai_model" not in st.session_state:
     st.session_state["openai_model"] = "gpt-4o"
