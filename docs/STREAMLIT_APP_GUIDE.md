@@ -203,7 +203,4 @@ There is one class used for state and UI refresh.
 
 ## 5. Summary
 
-- **Flow:** Chat → (optional) report plan via tool → Execute Plan → agent runs Python + search → report code generated from agent output → code shown in Code tab and run in Report area.
-- **Diagram:** Section 2 gives a structural and data-flow diagram of the file.
-- **Important functions:** Environment init, stream/data/table helpers, `generate_chatbot_response`, `execute_plan`, `format_intermediate_steps`, `generate_code_for_display_report` — with parameters and return values as in the table and “parameters in depth” above.
-- **Class:** `SessionStateAutoClass` uses `__setattr__` and `__getattr__` to bind an attribute to `st.session_state` and trigger `st.rerun()` on change so the “Code” tab updates when the agent’s intermediate steps are set.
+
