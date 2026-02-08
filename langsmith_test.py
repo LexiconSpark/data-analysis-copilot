@@ -1,19 +1,46 @@
 """LangChain test agent using the same API as streamlit_app (create_openai_functions_agent + AgentExecutor)."""
 import os
 from dotenv import load_dotenv
-from langchain import hub
+#from langchain import hub
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_openai_functions_agent, AgentExecutor
 from langchain.tools import Tool
+# used to trace openai calls
+from langsmith.wrappers import wrap_openai 
+from openai import OpenAI
 
 load_dotenv()
+
+def retriever(query: str):
+    return["test query"]
+
+client = wrap_openai(OpenAI())
+
+def rag(question: str) -> str:
+    docs = retriever(question)
+    system_message = (
+        "Answer the user's question using only the provided information below:\n"
+        + "\n".join(docs)
+    )
+    
+    resp = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=[
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": question},
+        ],
+    )
+    return resp.choices[0].message.content
+
+if __name__ == "__main__":
+    print(rag("Where did how did query go?"))
 
 '''  res_dict = client.pull_repo(owner_repo_commit)'''
 def get_weather(city: str) -> str:
     """Get weather for a given city."""
     return f"It's always sunny in {city}!"
 
-
+'''
 # Wrap the function as a LangChain Tool (required by the 0.2.x agent API)
 weather_tool = Tool(
     name="get_weather",
@@ -37,3 +64,4 @@ result = agent_executor.invoke(
     {"input": "What is the weather in San Francisco?"}
 )
 print(result["output"])
+'''
