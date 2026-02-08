@@ -5,3 +5,4 @@ venv
 *.png
 .aider.*
 .streamlit
+_bmad*
