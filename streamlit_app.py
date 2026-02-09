@@ -38,8 +38,8 @@ TEXTBOX_HIGHT = 90
 
 def initialize_environment():
     load_dotenv()
-    os.environ["LANGCHAIN_TRACING_V2"] = "data_analysis_copilot"
-    os.environ["LANGCHAIN_PROJECT"] = "true"  # enable tracing
+    os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"  # enable tracing
     os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY")
     os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
     
@@ -97,162 +97,142 @@ def handle_table_change():
 @traceable(nme="generate_chatbot_reponse")
 def generate_chatbot_response(openai_client, session_state, user_input):
     # generate the response from openai api
-        stream = openai_client.chat.completions.create(
+    stream = openai_client.chat.completions.create(
+        model=session_state["openai_model"],
+        messages=[
+            {
+                "role": "system",
+                "content": """You are a data analysis Copilot that is able to help user to generate report with data analysis in them. you are able to search on internet and you're able to help people to look into the table data from the user. however currently you can only do those if user is sending you a message stating clearly that they like to create a report. if they are not asking you about creating a report please try to answer their questions and explain what you can do to help, and ask them to create a report if that's their goal if you think it is needed, 
+                   for example, create a report of column B and column C and caluclate the correlation between the two columns""",
+            }
+        ]
+        + [
+            {"role": m["role"], "content": m["content"]} for m in session_state.messages
+        ],
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "trigger_report_generation",
+                    "description": "Trigger this function when user asks about creating a report or any calculation to do with the existing dataset",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "user_message": {
+                                "type": "string",
+                                "description": "The user's message asking about creating a report or any calculation to do with the existing dataset",
+                            }
+                        },
+                        "required": ["user_message"],
+                    },
+                },
+            }
+        ],
+        tool_choice="auto",
+    )
+    response_message = stream.choices[0].message
+    # get the tool calls
+    tool_calls = response_message.tool_calls
+    # if the tool is called to generated report
+    if tool_calls and tool_calls[0].function.name == "trigger_report_generation":
+        # display the message when the report is created
+        st.write_stream(
+            get_stream(
+                "Got it, here is a plan to create report for this request of yours:"
+            )
+        )
+        # get the dataframe of the csv
+        result = get_data(session_state.df)
+        # update the current user input
+        session_state.current_user_input = user_input
+        # generate the plan
+        plan = openai_client.chat.completions.create(
             model=session_state["openai_model"],
             messages=[
                 {
-                    "role": "system",
-                    "content": """You are a data analysis Copilot that is able to help user to generate report with data analysis in them. you are able to search on internet and you're able to help people to look into the table data from the user. however currently you can only do those if user is sending you a message stating clearly that they like to create a report. if they are not asking you about creating a report please try to answer their questions and explain what you can do to help, and ask them to create a report if that's their goal if you think it is needed, 
-                       for example, create a report of column B and column C and caluclate the correlation between the two columns""",
-                }
-            ]
-            + [
-                {"role": m["role"], "content": m["content"]} for m in session_state.messages
-            ],
-            tools=[
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "trigger_report_generation",
-                        "description": "Trigger this function when user asks about creating a report or any calculation to do with the existing dataset",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "user_message": {
-                                    "type": "string",
-                                    "description": "The user's message asking about creating a report or any calculation to do with the existing dataset",
-                                }
-                            },
-                            "required": ["user_message"],
-                        },
-                    },
+                    "role": "user",
+                    "content": user_input
+                    + """ \n make a simple plan that is simple to understand without technical terms to create code in python 
+                        to analyze this data(do not include the code), only include the plan as list of steps in the output. 
+                        At the same time, you are also given a list of tools, they are python_repl_tool for writing code, and another one is called web_search for searching on the web for knowledge you do not know. 
+                        Please assign the right tool to do each step, knowing the tools that got activated later will know the output of the previous tools. 
+                        the plan can be hierarchical, meaning that when multiple related and consecutive step can be grouped in one big step and be achieve by the same tool,
+                        you can group under a parent step and have them as sub-steps and only mention the tool recommended for the partent step. try to limit your parent step to be less than 5 steps. 
+                        At the each parent step of the plan, please indicate the tool you recommend in a [] such as [Tool: web_search], and put it at the begining of that step. Do not indicate the tool recommendation for sub-steps
+                        In your output please only give one coherent plan with no analysis
+                            """
+                    + "\n this is the data \n"
+                    + result,
                 }
             ],
-            tool_choice="auto",
+            stream=True,
         )
-
-        response_message = stream.choices[0].message
-
-        # get the tool calls
-        tool_calls = response_message.tool_calls
-
-        # if the tool is called to generated report
-        if tool_calls and tool_calls[0].function.name == "trigger_report_generation":
-
-            # display the message when the report is created
-            st.write_stream(
-                get_stream(
-                    "Got it, here is a plan to create report for this request of yours:"
-                )
+        # display the plan
+        response = st.write_stream(plan)
+        # update the plan
+        st.write_stream(
+            get_stream(
+                "📝 If you like the plan, please click on 'Execute Plan' button on the 'Plan' tab in the top right panel. Or feel free to ask me to revise the plan in this chat"
             )
+        )
+        session_state.plan = response
+    # if a simple data question is asked
+    elif tool_calls and tool_calls[0].function.name == "simple_data_analysis":
+        # call the data agent
+        data_agent = create_pandas_dataframe_agent(
+            ChatOpenAI(
+                temperature=0,
+                api_key="sk-proj-pPMRDpoxQeXFmBk1HGmRT3BlbkFJRPax8CTo4YfwzzgmCXJD",
+            ),
+            st.session_state.df,
+            verbose=True,
+        )
+        # generate response
+        answer = data_agent.invoke(user_input)["output"]
+        asnwer_reported = openai_client.chat.completions.create(
+            model=session_state["openai_model"],
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Based on the following answer, "
+                    + answer
+                    + " answer this question with a simple sentence"
+                    + user_input,
+                }
+            ],
+            stream=True,
+        )
+        response = st.write_stream(asnwer_reported)
+    elif tool_calls and tool_calls[0].function.name == "simple_data_analysis":
+        # call the data agent
+        data_agent = create_pandas_dataframe_agent(
+            ChatOpenAI(
+                temperature=0,
+                api_key="sk-proj-pPMRDpoxQeXFmBk1HGmRT3BlbkFJRPax8CTo4YfwzzgmCXJD",
+            ),
+            st.session_state.df,
+            verbose=True,
+        )
+        # generate response
+        answer = data_agent.invoke(user_input)["output"]
+        asnwer_reported = openai_client.chat.completions.create(
+            model=session_state["openai_model"],
+            messages=[
+                {
+                    "role": "user",
+                    "content": "Based on the following answer, "
+                    + answer
+                    + " answer this question with a simple sentence"
+                    + user_input,
+                }
+            ],
+            stream=True,
+        )
+        response = st.write_stream(asnwer_reported)
+    else:
+        response = st.write_stream(get_stream(stream.choices[0].message.content))
 
-            # get the dataframe of the csv
-            result = get_data(session_state.df)
-
-            # update the current user input
-            session_state.current_user_input = user_input
-
-            # generate the plan
-            plan = openai_client.chat.completions.create(
-                model=session_state["openai_model"],
-                messages=[
-                    {
-                        "role": "user",
-                        "content": user_input
-                        + """ \n make a simple plan that is simple to understand without technical terms to create code in python 
-                            to analyze this data(do not include the code), only include the plan as list of steps in the output. 
-                            At the same time, you are also given a list of tools, they are python_repl_tool for writing code, and another one is called web_search for searching on the web for knowledge you do not know. 
-                            Please assign the right tool to do each step, knowing the tools that got activated later will know the output of the previous tools. 
-                            the plan can be hierarchical, meaning that when multiple related and consecutive step can be grouped in one big step and be achieve by the same tool,
-                            you can group under a parent step and have them as sub-steps and only mention the tool recommended for the partent step. try to limit your parent step to be less than 5 steps. 
-                            At the each parent step of the plan, please indicate the tool you recommend in a [] such as [Tool: web_search], and put it at the begining of that step. Do not indicate the tool recommendation for sub-steps
-                            In your output please only give one coherent plan with no analysis
-                                """
-                        + "\n this is the data \n"
-                        + result,
-                    }
-                ],
-                stream=True,
-            )
-
-            # display the plan
-            response = st.write_stream(plan)
-
-            # update the plan
-            st.write_stream(
-                get_stream(
-                    "📝 If you like the plan, please click on 'Execute Plan' button on the 'Plan' tab in the top right panel. Or feel free to ask me to revise the plan in this chat"
-                )
-            )
-            session_state.plan = response
-
-        # if a simple data question is asked
-        elif tool_calls and tool_calls[0].function.name == "simple_data_analysis":
-
-            # call the data agent
-            data_agent = create_pandas_dataframe_agent(
-                ChatOpenAI(
-                    temperature=0,
-                    api_key="sk-proj-pPMRDpoxQeXFmBk1HGmRT3BlbkFJRPax8CTo4YfwzzgmCXJD",
-                ),
-                st.session_state.df,
-                verbose=True,
-            )
-
-            # generate response
-            answer = data_agent.invoke(user_input)["output"]
-
-            asnwer_reported = openai_client.chat.completions.create(
-                model=session_state["openai_model"],
-                messages=[
-                    {
-                        "role": "user",
-                        "content": "Based on the following answer, "
-                        + answer
-                        + " answer this question with a simple sentence"
-                        + user_input,
-                    }
-                ],
-                stream=True,
-            )
-
-            response = st.write_stream(asnwer_reported)
-        elif tool_calls and tool_calls[0].function.name == "simple_data_analysis":
-
-            # call the data agent
-            data_agent = create_pandas_dataframe_agent(
-                ChatOpenAI(
-                    temperature=0,
-                    api_key="sk-proj-pPMRDpoxQeXFmBk1HGmRT3BlbkFJRPax8CTo4YfwzzgmCXJD",
-                ),
-                st.session_state.df,
-                verbose=True,
-            )
-
-            # generate response
-            answer = data_agent.invoke(user_input)["output"]
-
-            asnwer_reported = openai_client.chat.completions.create(
-                model=session_state["openai_model"],
-                messages=[
-                    {
-                        "role": "user",
-                        "content": "Based on the following answer, "
-                        + answer
-                        + " answer this question with a simple sentence"
-                        + user_input,
-                    }
-                ],
-                stream=True,
-            )
-
-            response = st.write_stream(asnwer_reported)
-
-        else:
-            response = st.write_stream(get_stream(stream.choices[0].message.content))
-
-    
-        return response
+    return response
 
 
 # Functions to execute the plan generated
