@@ -1,3 +1,8 @@
+# Test Prompts
+Analyze the data from column A and column B.
+
+Calculate the correlation between the two columns
+======
 Goal: get MVP by Feb 25th
 *5-2-26*
 continued to instl dependencies
