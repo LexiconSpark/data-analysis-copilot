@@ -1,8 +1,9 @@
+import os
 import streamlit as st
 import pandas as pd
 import random
 import time
-import os
+
 from dotenv import load_dotenv
 from langchain import hub
 from langchain.agents import AgentExecutor
@@ -28,6 +29,9 @@ from streamlit_chat import message
 from streamlit_ace import st_ace
 from openai import OpenAI
 
+from langsmith.wrappers import wrap_openai
+from langsmith import traceable
+
 load_dotenv()
 ROW_HIGHT = 600
 TEXTBOX_HIGHT = 90
@@ -36,6 +40,16 @@ TEXTBOX_HIGHT = 90
 def initialize_environment():
     load_dotenv()
     os.environ["LANGCHAIN_TRACING_V2"] = "true"
+    os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"  # enable tracing
+    os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY")
+    os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
+    
+    #openai_client = wrap_openai(OpenAI(api_key=os.getenv("OPENAI_API_KEY")))
+    
+    return (
+        LangSmithClient(),
+        wrap_openai(OpenAI(api_key=os.getenv("OPENAI_API_KEY"))),
+        os.getenv("OPENAI_API_KEY"),
     os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
     os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY")
     os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
@@ -88,8 +102,8 @@ def handle_table_change():
 
 
 # function to generate the reponse of the chatbot
+@traceable(nme="generate_chatbot_reponse")
 def generate_chatbot_response(openai_client, session_state, user_input):
-
     # generate the response from openai api
     stream = openai_client.chat.completions.create(
         model=session_state["openai_model"],
@@ -124,28 +138,21 @@ def generate_chatbot_response(openai_client, session_state, user_input):
         ],
         tool_choice="auto",
     )
-
     response_message = stream.choices[0].message
-
     # get the tool calls
     tool_calls = response_message.tool_calls
-
     # if the tool is called to generated report
     if tool_calls and tool_calls[0].function.name == "trigger_report_generation":
-
         # display the message when the report is created
         st.write_stream(
             get_stream(
                 "Got it, here is a plan to create report for this request of yours:"
             )
         )
-
         # get the dataframe of the csv
         result = get_data(session_state.df)
-
         # update the current user input
         session_state.current_user_input = user_input
-
         # generate the plan
         plan = openai_client.chat.completions.create(
             model=session_state["openai_model"],
@@ -154,13 +161,13 @@ def generate_chatbot_response(openai_client, session_state, user_input):
                     "role": "user",
                     "content": user_input
                     + """ \n make a simple plan that is simple to understand without technical terms to create code in python 
-to analyze this data(do not include the code), only include the plan as list of steps in the output. 
-At the same time, you are also given a list of tools, they are python_repl_tool for writing code, and another one is called web_search for searching on the web for knowledge you do not know. 
-Please assign the right tool to do each step, knowing the tools that got activated later will know the output of the previous tools. 
-the plan can be hierarchical, meaning that when multiple related and consecutive step can be grouped in one big step and be achieve by the same tool,
-you can group under a parent step and have them as sub-steps and only mention the tool recommended for the partent step. try to limit your parent step to be less than 5 steps. 
-At the each parent step of the plan, please indicate the tool you recommend in a [] such as [Tool: web_search], and put it at the begining of that step. Do not indicate the tool recommendation for sub-steps
-In your output please only give one coherent plan with no analysis
+                        to analyze this data(do not include the code), only include the plan as list of steps in the output. 
+                        At the same time, you are also given a list of tools, they are python_repl_tool for writing code, and another one is called web_search for searching on the web for knowledge you do not know. 
+                        Please assign the right tool to do each step, knowing the tools that got activated later will know the output of the previous tools. 
+                        the plan can be hierarchical, meaning that when multiple related and consecutive step can be grouped in one big step and be achieve by the same tool,
+                        you can group under a parent step and have them as sub-steps and only mention the tool recommended for the partent step. try to limit your parent step to be less than 5 steps. 
+                        At the each parent step of the plan, please indicate the tool you recommend in a [] such as [Tool: web_search], and put it at the begining of that step. Do not indicate the tool recommendation for sub-steps
+                        In your output please only give one coherent plan with no analysis
                             """
                     + "\n this is the data \n"
                     + result,
@@ -168,10 +175,8 @@ In your output please only give one coherent plan with no analysis
             ],
             stream=True,
         )
-
         # display the plan
         response = st.write_stream(plan)
-
         # update the plan
         st.write_stream(
             get_stream(
@@ -179,10 +184,8 @@ In your output please only give one coherent plan with no analysis
             )
         )
         session_state.plan = response
-
     # if a simple data question is asked
     elif tool_calls and tool_calls[0].function.name == "simple_data_analysis":
-
         # call the data agent
         data_agent = create_pandas_dataframe_agent(
             ChatOpenAI(
@@ -192,10 +195,8 @@ In your output please only give one coherent plan with no analysis
             st.session_state.df,
             verbose=True,
         )
-
         # generate response
         answer = data_agent.invoke(user_input)["output"]
-
         asnwer_reported = openai_client.chat.completions.create(
             model=session_state["openai_model"],
             messages=[
@@ -209,10 +210,8 @@ In your output please only give one coherent plan with no analysis
             ],
             stream=True,
         )
-
         response = st.write_stream(asnwer_reported)
     elif tool_calls and tool_calls[0].function.name == "simple_data_analysis":
-
         # call the data agent
         data_agent = create_pandas_dataframe_agent(
             ChatOpenAI(
@@ -222,10 +221,8 @@ In your output please only give one coherent plan with no analysis
             st.session_state.df,
             verbose=True,
         )
-
         # generate response
         answer = data_agent.invoke(user_input)["output"]
-
         asnwer_reported = openai_client.chat.completions.create(
             model=session_state["openai_model"],
             messages=[
@@ -239,9 +236,7 @@ In your output please only give one coherent plan with no analysis
             ],
             stream=True,
         )
-
         response = st.write_stream(asnwer_reported)
-
     else:
         response = st.write_stream(get_stream(stream.choices[0].message.content))
 
@@ -514,4 +509,6 @@ with st.container():
             st.write("### AI Generated Report")
 
             # execute the code
+            exec(reporting_code)
+            
             exec(reporting_code)

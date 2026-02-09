@@ -1,3 +1,7 @@
+# Set Up
+## activate python environment
+`source venv/bin/activate`
+
 # How to Navigate through this project
 - Use Main and Dev to view the different stages of the project
 
