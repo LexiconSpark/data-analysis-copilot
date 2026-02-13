@@ -517,6 +517,7 @@ with st.container():
             
             exec(reporting_code)
 
+<<<<<<< HEAD
 with st.sidebar:
     st.header("Knowledge Base (RAG)")
     files = st.file_uploader("Upload docs", accept_multiple_files=True, type=["txt","md","pdf"])
@@ -560,6 +561,8 @@ with st.sidebar:
         st.session_state.kb_chunks = kb_chunks
         st.session_state.kb_embs = embs
         st.success(f"Indexed {len(kb_chunks)} chunks.")
+=======
+>>>>>>> 650a6f4aba6a343e2ca8be5a9697d53e4a443e02
 
 def initialize_langgraph_agent():
     
