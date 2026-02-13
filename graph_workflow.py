@@ -3,7 +3,7 @@ LangGraph workflow for data analysis copilot
 """
 from typing import TypedDict, Annotated, Sequence, Literal
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph
 from langgraph.graph.message import add_messages
 from langchain_openai import ChatOpenAI
 from langchain_community.tools import DuckDuckGoSearchResults
@@ -254,11 +254,11 @@ def create_data_analysis_graph():
     # Add sequential edges for report generation flow
     workflow.add_edge("generate_plan", "execute_plan")
     workflow.add_edge("execute_plan", "generate_report_code")
-    workflow.add_edge("generate_report_code", END)
+    workflow.add_edge("generate_report_code", "__end__")
 
     # Add edges to END for other paths
-    workflow.add_edge("simple_qa", END)
-    workflow.add_edge("general_chat", END)
+    workflow.add_edge("simple_qa", "__end__")
+    workflow.add_edge("general_chat", "__end__")
 
     # Compile the graph
     app = workflow.compile()

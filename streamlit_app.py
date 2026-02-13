@@ -5,7 +5,6 @@ import random
 import time
 
 from dotenv import load_dotenv
-from langchain import hub
 from langchain.agents import AgentExecutor
 from langchain_experimental.tools import PythonREPLTool
 from langchain_experimental.tools import PythonAstREPLTool
@@ -18,6 +17,7 @@ from langchain.chains import LLMMathChain
 import langsmith
 from langsmith.wrappers import wrap_openai
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
+from langchain import hub
 
 
 from langchain_openai import ChatOpenAI
@@ -31,6 +31,10 @@ from openai import OpenAI
 
 from langsmith.wrappers import wrap_openai
 from langsmith import traceable
+
+from typing import TypedDict, Annotated
+from langgraph.graph import StateGraph
+from langgraph.graph.message import add_messages
 
 load_dotenv()
 ROW_HIGHT = 600
@@ -46,23 +50,16 @@ def initialize_environment():
     
     #openai_client = wrap_openai(OpenAI(api_key=os.getenv("OPENAI_API_KEY")))
     
-    return (
+    return (    
         LangSmithClient(),
         wrap_openai(OpenAI(api_key=os.getenv("OPENAI_API_KEY"))),
         os.getenv("OPENAI_API_KEY"),
-    os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
-    os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY")
-    os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
-    return (
-        LangSmithClient(),
-        OpenAI(api_key=os.getenv("OPENAI_API_KEY")),
-        os.getenv("OPENAI_API_KEY")
-    )
 
-
+)
+    
 # Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
 langsmith_client, openai_client, OPENAI_API_KEY = initialize_environment()
-openai_client = wrap_openai(openai_client, langsmith_client)
+
 
 if "openai_model" not in st.session_state:
     st.session_state["openai_model"] = "gpt-4o"
@@ -279,7 +276,7 @@ Anything of the part of the code that is todo with searching on the internet ple
     You will trigger the corresponding recommneded tool to execute different parent steps along with its substep in one big step.
     and clearly noting down the results from the each steps.
     """
-    # Pull the base prompt
+    # Pull the base prompt (using LangSmith; hub is deprecated)
     base_prompt = hub.pull("langchain-ai/openai-functions-template")
     prompt = base_prompt.partial(instructions=instructions)
 
@@ -300,7 +297,10 @@ Anything of the part of the code that is todo with searching on the internet ple
         + " with this dataseset "
         + st.session_state.df.to_csv()
     )
-
+    '''
+    result = langgraph_app.invoke({"messages": [HumanMessage(content=input_data)]})
+    langraph_repsonse = result["messages"][-1].content
+    '''
     # Execute the agent
     response = agent_executor.invoke({"input": input_data})
 
@@ -512,3 +512,35 @@ with st.container():
             exec(reporting_code)
             
             exec(reporting_code)
+
+
+def initialize_langgraph_agent():
+    
+    class AgentState(TypedDict):
+        messeges: Annotated[list, add_messages]
+
+    model = ChatOpenAI(
+        model="gpt-4o-mini", 
+        temperature=0, 
+        api_key=os.getenv("OPENAI_API_KEY")
+    )
+
+    def call_model(state: AgentState):
+        response = openai_client.invoke(state["messages"])
+        return {"messages": [response]}
+    
+    
+    def run_code(state: AgentState):
+        return state  # placeholder
+    
+    
+    # 3. Build and compile the graph
+    graph = StateGraph(AgentState)
+    graph.add_node("agent", call_model)
+    graph.add_node("code_executor", run_code)
+    graph.add_edge("__start__", "agent")
+    graph.add_edge("agent", "code_executor")
+    graph.add_edge("code_executor", "__end__")
+    app = graph.compile()
+
+langgraph_app = initialize_langgraph_agent()

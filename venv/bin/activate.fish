@@ -33,7 +33,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV /Users/macbookpro/Library/CloudStorage/OneDrive-Personal/code/sparkcraft/data-analysis-copilot/venv
+set -gx VIRTUAL_ENV /home/emeka/data-analysis-recloned/data-analysis-copilot/venv
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/"bin $PATH
