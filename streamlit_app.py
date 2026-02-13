@@ -1,6 +1,7 @@
 import os
 import streamlit as st
 import pandas as pd
+import numpy as np
 import random
 import time
 
@@ -374,12 +375,15 @@ Only respond with code as plain text without code block syntax around it. Again,
 if "plan" not in st.session_state:
     st.session_state.plan = ""
 if "code" not in st.session_state:
-    st.session_state.code = """
+    st.session_state.code = """    
 st.write("There is no report created yet, please ask the chatbot to create a report if you need")
 """
 if "thoughtflow" not in st.session_state:
     st.session_state.agent_thoughtflow = ""
-
+if "kb_chunks" not in st.session_state:
+    st.session_state.kb_chunks = []   # list of {"text":..., "meta":...}
+if "kb_embs" not in st.session_state:
+    st.session_state.kb_embs = None   # np.ndarray shape (n, d), L2-normalized
 
 # Below is a method for creating a state variable that auto refreshes on the frontend as the value changes, without the need to manually do st.rerun()
 # Be careful with using it since it uses the special session_state_auto variable, as it could trigger st.rerun() within it and sometimes interrupt other steps.
@@ -513,6 +517,49 @@ with st.container():
             
             exec(reporting_code)
 
+with st.sidebar:
+    st.header("Knowledge Base (RAG)")
+    files = st.file_uploader("Upload docs", accept_multiple_files=True, type=["txt","md","pdf"])
+    if st.button("Index documents") and files:
+        chunks = []
+        for f in files:
+            name = f.name
+            data = f.read()
+
+            text = ""
+            if name.lower().endswith((".txt", ".md")):
+                text = data.decode("utf-8", errors="ignore")
+                chunks.append((text, {"source": name, "page": None}))
+            elif name.lower().endswith(".pdf"):
+                # keep MVP simple: add PDF support later if pypdf isn't installed
+                # (or implement pypdf parsing here if your env supports it)
+                chunks.append((f"[PDF uploaded: {name} - add parsing]", {"source": name, "page": None}))
+
+        # simple chunking
+        def chunk_text(t, size=1000, overlap=200):
+            out, i = [], 0
+            while i < len(t):
+                out.append(t[i:i+size])
+                i += size - overlap
+            return out
+
+        kb_chunks = []
+        for t, meta in chunks:
+            for idx, ct in enumerate(chunk_text(t)):
+                kb_chunks.append({"text": ct, "meta": {**meta, "chunk": idx}})
+
+        # embed in batches
+        texts = [c["text"] for c in kb_chunks]
+        resp = openai_client.embeddings.create(
+            model="text-embedding-3-small",
+            input=texts
+        )
+        embs = np.array([d.embedding for d in resp.data], dtype=np.float32)
+        embs /= (np.linalg.norm(embs, axis=1, keepdims=True) + 1e-12)
+
+        st.session_state.kb_chunks = kb_chunks
+        st.session_state.kb_embs = embs
+        st.success(f"Indexed {len(kb_chunks)} chunks.")
 
 def initialize_langgraph_agent():
     
