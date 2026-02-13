@@ -1,4 +1,4 @@
 Wheel-Version: 1.0
 Generator: bazel-wheelmaker 1.0
 Root-Is-Purelib: false
-Tag: cp38-abi3-macosx_10_9_universal2
+Tag: cp38-abi3-manylinux2014_x86_64
