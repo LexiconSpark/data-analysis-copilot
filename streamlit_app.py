@@ -6,22 +6,15 @@ import time
 
 from dotenv import load_dotenv
 from langchain import hub
-from langchain.agents import AgentExecutor
+from langchain.agents import AgentExecutor, create_openai_functions_agent
+from langchain_core.tools import Tool
 from langchain_experimental.tools import PythonREPLTool
 from langchain_experimental.tools import PythonAstREPLTool
-from langchain_community.llms import OpenAI as OpenAI_2
-from langchain.agents import initialize_agent, AgentType
-from langchain.tools import Tool
 from langchain_community.tools import DuckDuckGoSearchResults
-from langchain.memory import ConversationBufferMemory
-from langchain.chains import LLMMathChain
+from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
+from langchain_openai import ChatOpenAI
 import langsmith
 from langsmith.wrappers import wrap_openai
-from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
-
-
-from langchain_openai import ChatOpenAI
-from langchain.agents import create_openai_functions_agent
 import matplotlib.pyplot as plt
 import re
 from langsmith import Client as LangSmithClient
@@ -62,7 +55,7 @@ def initialize_environment():
 
 # Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
 langsmith_client, openai_client, OPENAI_API_KEY = initialize_environment()
-openai_client = wrap_openai(openai_client, langsmith_client)
+openai_client = wrap_openai(openai_client)
 
 if "openai_model" not in st.session_state:
     st.session_state["openai_model"] = "gpt-4o"
