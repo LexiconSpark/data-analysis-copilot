@@ -37,15 +37,6 @@ def initialize_environment():
     os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY")
     os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
     
-    #openai_client = wrap_openai(OpenAI(api_key=os.getenv("OPENAI_API_KEY")))
-    
-    return (
-        LangSmithClient(),
-        wrap_openai(OpenAI(api_key=os.getenv("OPENAI_API_KEY"))),
-        os.getenv("OPENAI_API_KEY"),
-    os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"
-    os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY")
-    os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
     return (
         LangSmithClient(),
         OpenAI(api_key=os.getenv("OPENAI_API_KEY")),
@@ -502,6 +493,4 @@ with st.container():
             st.write("### AI Generated Report")
 
             # execute the code
-            exec(reporting_code)
-            
             exec(reporting_code)
