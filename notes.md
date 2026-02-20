@@ -55,3 +55,34 @@ pydantic.v1.error_wrappers.ValidationError: 1 validation error for DDGInput
 
 # LangGraph Structure
 have the plan. Write code and then replan workflow, and then also have the write code check error and rewrite code loop, these two loops. And then so they added together.
+
+# Orchestrator example
+# create agents exactly like in your app
+data_agent = create_pandas_dataframe_agent(
+    ChatOpenAI(temperature=0, api_key=OPENAI_API_KEY),
+    st.session_state.df,
+    verbose=True,
+)
+
+# reuse your execution agent creation (AgentExecutor) if needed
+agent = create_openai_functions_agent(
+    ChatOpenAI(temperature=0, openai_api_key=OPENAI_API_KEY),
+    tools, prompt
+)
+execution_agent = AgentExecutor(agent=agent, tools=tools, verbose=True, return_intermediate_steps=True)
+
+# optional compiled LangGraph code agent
+from langgraph_code_agent import app as code_agent_app
+
+registry = {
+    "data": data_agent,
+    "executor": execution_agent,
+    "code": code_agent_app,
+}
+
+orchestrator = initialize_orchestrator(registry)
+
+# invoke orchestrator with task
+resp = orchestrator.invoke({"task": "Compute the mean and stddev of column A and return a short summary."})
+print("chosen agent:", resp.get("agent"))
+print("raw result:", resp.get("result"))
