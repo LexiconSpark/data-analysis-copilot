@@ -63,8 +63,6 @@ langsmith_client, openai_client, OPENAI_API_KEY = initialize_environment()
 # ORCHESTRATOR AGENT WITH REAL LLM
 # ========================================
 
-
-
 # Define the orchestrator state
 class OrchestratorState(TypedDict):
     messages: Annotated[list, add_messages]
@@ -122,7 +120,9 @@ def code_worker(state: OrchestratorState):
     Dataset (as CSV):
     {state['dataframe_csv'][:500]}
     
-    Use pandas. Return only executable code."""
+    Write code that uses the existing 'df' variable.
+    Use only pandas operations on 'df'.
+    Return only executable code."""
     
     response = model.invoke([HumanMessage(content=prompt)])
     
@@ -236,14 +236,7 @@ def get_stream(sentence):
         yield word + " "
         time.sleep(0.05)
 
-
-# function to get the dataframe of the csv
-def get_data(placeholder):
-    new_data = st.session_state.df.to_csv()
-    return new_data
-
-
-# function to generate a random dataframe
+# function to generate a test dataframe
 def get_dataframe():
     df = pd.DataFrame(
         {
@@ -253,6 +246,11 @@ def get_dataframe():
         }
     )
     return df
+
+# function to get the dataframe of the csv
+def get_data(placeholder):
+    new_data = st.session_state.df.to_csv()
+    return new_data
 
 
 # This is the function for handling changes in csv
@@ -426,7 +424,8 @@ In your output please only give one coherent plan with no analysis
 
 def execute_plan(plan):
     """Execute plan using LangGraph orchestrator agent"""
-    
+    if "df" not in st.session_state:
+        st.session_state.df = get_dataframe()
     # Prepare initial state for orchestrator
     initial_state = {
         "messages": [HumanMessage(content=st.session_state.current_user_input)],
@@ -445,16 +444,27 @@ def execute_plan(plan):
             # Extract results
             final_messages = result.get("messages", [])
             final_plan = result.get("plan", "")
+            final_output = result.get("final_output", "")
+            
             
             # Generate display code for the report
             code_prompt = f"""
-            Create Streamlit code to display this analysis result:
+            Create Streamlit code to display this analysis result.
             
-            Plan: {final_plan}
-            Messages: {[msg.content for msg in final_messages if hasattr(msg, 'content')]}
+            IMPORTANT RULES:
+            1. The dataframe is ALREADY LOADED as variable 'df' - DO NOT load it from CSV
+            2. DO NOT use pd.read_csv() or any file loading
+            3. The dataframe 'df' is already available in the environment
+            4. Use st.write(), st.dataframe(), st.metric(), or st.image() to display results
+            5. Only respond with Python code as plain text (no markdown code blocks)
             
-            Use st.write() or st.image() to display.
-            Only respond with code as plain text without markdown code blocks.
+            User's request: {st.session_state.current_user_input}
+            Analysis result: {final_output}
+            
+            Example of what to generate:
+            st.write("### Analysis Results")
+            st.write("{final_output}")
+            st.dataframe(df.head())
             """
             
             code_response = openai_client.chat.completions.create(
@@ -504,7 +514,7 @@ def format_intermediate_steps(response):
         tool_input = step[0].tool_input
         log = step[0].log.strip()
         formatted_output += (
-            f"Invoked `{tool}` with: \n```python\n\n{tool_input}\n```\n\n"
+            f"Invoked `{tool}` with: \npython\n\n{tool_input}\n\n\n"
         )
     formatted_output += f"Final Output: \n `{response['output']}`"
     return formatted_output
@@ -548,9 +558,12 @@ Only respond with code as plain text without code block syntax around it. Again,
 if "plan" not in st.session_state:
     st.session_state.plan = ""
 if "code" not in st.session_state:
-    st.session_state.code = """
-st.write("There is no report created yet, please ask the chatbot to create a report if you need")
+    st.session_state.code = """# No report generated yet
+st.write("### Hi!")
+st.write("There is no report created yet.")
+st.write("Please ask the chatbot to create a report or click 'Test Orchestrator Agent' to see it in action.")
 """
+
 if "thoughtflow" not in st.session_state:
     st.session_state.agent_thoughtflow = ""
 
@@ -649,7 +662,7 @@ with st.container():
                      # Show dataframe being used
                     st.write("**Dataframe Used:**")
                     st.dataframe(st.session_state.df.head())
-                    
+
                     # Show results
                     st.write("**Agent Results:**")
                     st.write(f"- Assigned Worker: `{result.get('assigned_worker', 'N/A')}`")
@@ -702,10 +715,40 @@ with st.container():
             # update the dataframe
             st.session_state.df = edited_df
 
-    # create the fourth column in second row
+   # create the fourth column in second row
     with col2row2:
         with st.container(height=ROW_HIGHT):
             st.write("### AI Generated Report")
-
-            # execute the code
-            exec(reporting_code)
+            
+            # Ensure dataframe exists
+            if "df" not in st.session_state:
+                st.session_state.df = get_dataframe()
+            
+            # Get reporting code
+            if not reporting_code or reporting_code.strip() == "":
+                reporting_code = st.session_state.code
+            
+            # Execute with safe environment
+            try:
+                # Create execution environment with necessary variables
+                exec_globals = {
+                    'st': st,
+                    'pd': pd,
+                    'plt': plt,
+                    'df': st.session_state.df,
+                    'get_dataframe': get_dataframe
+                }
+                exec(reporting_code, exec_globals)
+            except FileNotFoundError as e:
+                st.warning(f"Cannot execute code: File not found - {e}")
+                st.info("The report is trying to load 'dataset.csv' which doesn't exist.")
+                st.write("**Problematic Code:**")
+                st.code(reporting_code, language="python")
+                if st.button("Reset Report Code"):
+                    st.session_state.code = """st.write("### Welcome!")
+st.write("Generate a new report using the chatbot.")"""
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Error executing report code: {e}")
+                st.write("**Code causing error:**")
+                st.code(reporting_code, language="python")
