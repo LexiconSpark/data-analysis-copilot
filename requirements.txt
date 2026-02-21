@@ -18,6 +18,7 @@ fonttools==4.53.0
 frozenlist==1.4.1
 gitdb==4.0.11
 GitPython==3.1.43
+grandalf==0.8
 h11==0.14.0
 httpcore==1.0.5
 httpx==0.27.0
@@ -35,6 +36,7 @@ langchain-core==0.3.83
 langchain-experimental==0.3.4
 langchain-openai==0.3.35
 langchain-text-splitters==0.3.11
+langgraph==0.3.18
 langchainhub==0.1.21
 langsmith==0.7.0
 lxml==6.0.2
