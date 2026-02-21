@@ -210,6 +210,10 @@ def create_orchestrator_agent():
 orchestrator_agent = create_orchestrator_agent()
 
 def test_orchestrator_agent():
+    
+    if "df" not in st.session_state:
+        st.session_state.df = get_dataframe()
+        
     """Test the orchestrator agent"""
     result = orchestrator_agent.invoke({
         "messages": [],
@@ -634,11 +638,24 @@ with st.container():
                 
                 # Test LangGraph button
                 if st.button("🧪 Test Orchestrator Agent"):
+                    if "df" not in st.session_state:
+                        st.session_state.df = get_dataframe()
                     with st.spinner("Testing Orchestrator agent..."):
                         result = test_orchestrator_agent()
+                    
                     st.success("Orchestrator Agent Test Complete!")
-                    st.write("**Final State:**")
-                    st.json(result)
+                    
+                    st.write("**Final State & Datafram Used:**")
+                     # Show dataframe being used
+                    st.write("**Dataframe Used:**")
+                    st.dataframe(st.session_state.df.head())
+                    
+                    # Show results
+                    st.write("**Agent Results:**")
+                    st.write(f"- Assigned Worker: `{result.get('assigned_worker', 'N/A')}`")
+                    st.write(f"- Evaluation: `{result.get('evaluation_result', 'N/A')}`")
+                    st.write("**Final Output:**")
+                    st.text_area("Output", result.get('final_output', 'N/A'), height=200)
                 
                 # Separator
                 st.divider()
