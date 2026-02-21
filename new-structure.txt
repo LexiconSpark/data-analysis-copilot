@@ -1,0 +1,17 @@
+data_copilot/
+├── agents/
+│   ├── __init__.py
+│   ├── data_agent.py
+│   ├── executor_agent.py
+│   └── orchestrator.py
+├── tools/
+│   ├── __init__.py
+│   └── custom_tools.py
+├── ui/
+│   ├── __init__.py
+│   ├── chatbot.py
+│   └── display.py
+├── utils/
+│   ├── __init__.py
+│   └── helpers.py
+└── main.py

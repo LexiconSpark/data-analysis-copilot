@@ -13,6 +13,7 @@ class OrchestratorState(TypedDict):
     task: str
     agent: str
     result: Any
+    normalized_result: dict  # canonical output: {"text": "...", "meta": {...}}
     messages: Annotated[list, add_messages]
 
 
@@ -102,6 +103,41 @@ def initialize_orchestrator(agent_registry: dict):
 
         return {"result": result}
 
+    def normalize(state: OrchestratorState):
+        """Convert agent output into a canonical {"text": "...", "meta": {...}} format."""
+        result = state.get("result", {})
+        normalized = {"text": "", "meta": {"agent": state.get("agent"), "task": state.get("task")}}
+
+        if isinstance(result, dict):
+            # LangChain AgentExecutor: {"output": "..."}
+            if "output" in result:
+                normalized["text"] = str(result["output"])
+                normalized["meta"]["intermediate_steps"] = result.get("intermediate_steps", [])
+            # LangGraph: {"messages": [...]}
+            elif "messages" in result:
+                messages_list = result.get("messages", [])
+                if messages_list:
+                    last_msg = messages_list[-1]
+                    normalized["text"] = getattr(last_msg, "content", str(last_msg))
+                normalized["meta"]["messages_count"] = len(messages_list)
+            # Pandas agent or other: {"text": "..."}
+            elif "text" in result:
+                normalized["text"] = str(result["text"])
+            # Error dict
+            elif "error" in result:
+                normalized["text"] = f"Error: {result['error']}"
+                normalized["meta"]["error"] = True
+            else:
+                # fallback: convert dict to string
+                normalized["text"] = str(result)
+        elif isinstance(result, str):
+            normalized["text"] = result
+        else:
+            # Raw object
+            normalized["text"] = str(result)
+
+        return {"normalized_result": normalized}
+
     def collect(state: OrchestratorState):
         return state
 
@@ -109,12 +145,14 @@ def initialize_orchestrator(agent_registry: dict):
     graph.add_node("receive", receive)
     graph.add_node("classify", classify)
     graph.add_node("dispatch", dispatch)
+    graph.add_node("normalize", normalize)
     graph.add_node("collect", collect)
 
     graph.add_edge("__start__", "receive")
     graph.add_edge("receive", "classify")
     graph.add_edge("classify", "dispatch")
-    graph.add_edge("dispatch", "collect")
+    graph.add_edge("dispatch", "normalize")
+    graph.add_edge("normalize", "collect")
     graph.add_edge("collect", "__end__")
 
     return graph.compile()
@@ -128,6 +166,7 @@ if __name__ == "__main__":
         registry = {"code_agent": code_agent_app}
         orchestrator = initialize_orchestrator(registry)
         resp = orchestrator.invoke({"task": "Write a short Python function that computes Fibonacci numbers."})
-        print("Orchestrator result:", resp.get("result"))
+        print("Orchestrator result (raw):", resp.get("result"))
+        print("Orchestrator result (normalized):", resp.get("normalized_result"))
     except Exception as e:
         print("Example run failed:", e)

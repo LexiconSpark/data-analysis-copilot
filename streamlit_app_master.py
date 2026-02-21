@@ -1,11 +1,12 @@
-import os
 import streamlit as st
 import pandas as pd
-import numpy as np
 import random
+import matplotlib.pyplot as plt
+import re
 import time
-
+import os
 from dotenv import load_dotenv
+from langchain import hub
 from langchain.agents import AgentExecutor
 from langchain_experimental.tools import PythonREPLTool
 from langchain_experimental.tools import PythonAstREPLTool
@@ -16,27 +17,20 @@ from langchain_community.tools import DuckDuckGoSearchResults
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import LLMMathChain
 import langsmith
-from langsmith.wrappers import wrap_openai
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
-from langchain import hub
 
 
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_openai_functions_agent
-import matplotlib.pyplot as plt
-import re
+
 from langsmith import Client as LangSmithClient
+
+from langgraph.graph import StateGraph, MessagesState, START, END
+
 from streamlit_chat import message
 from streamlit_ace import st_ace
+
 from openai import OpenAI
-
-from langsmith.wrappers import wrap_openai
-from langsmith import traceable
-
-from typing import Any, TypedDict, Annotated
-from langgraph.graph import StateGraph
-from langgraph.graph.message import add_messages
-from langchain_core.messages import HumanMessage
 
 load_dotenv()
 ROW_HIGHT = 600
@@ -44,21 +38,19 @@ TEXTBOX_HIGHT = 90
 
 
 def initialize_environment():
+    # Initialize environment
     load_dotenv()
-    os.environ["LANGCHAIN_TRACING_V2"] = "true"
-    os.environ["LANGCHAIN_PROJECT"] = "data_analysis_copilot"  # enable tracing
-    os.environ["LANGCHAIN_API_KEY"] = os.getenv("LANGSMITH_API_KEY")
-    os.environ["LANGCHAIN_ENDPOINT"] = "https://api.smith.langchain.com"
-    
-    #openai_client = wrap_openai(OpenAI(api_key=os.getenv("OPENAI_API_KEY")))
-    
-    return (    
+    os.environ["LANGSMITH_PROJECT"] = "data_analysis_copilot"
+    os.environ["LANGSMITH_TRACING"] = "true"  # enable tracing
+    os.environ["LANGSMITH_API_KEY"] = os.getenv("LANGSMITH_API_KEY")
+    os.environ["LANGSMITH_ENDPOINT"] = "https://api.smith.langchain.com"
+    return (
         LangSmithClient(),
-        wrap_openai(OpenAI(api_key=os.getenv("OPENAI_API_KEY"))),
+        OpenAI(api_key=os.getenv("OPENAI_API_KEY")),
         os.getenv("OPENAI_API_KEY"),
+    )
 
-)
-    
+
 # Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
 langsmith_client, openai_client, OPENAI_API_KEY = initialize_environment()
 
@@ -101,8 +93,8 @@ def handle_table_change():
 
 
 # function to generate the reponse of the chatbot
-@traceable(nme="generate_chatbot_reponse")
 def generate_chatbot_response(openai_client, session_state, user_input):
+
     # generate the response from openai api
     stream = openai_client.chat.completions.create(
         model=session_state["openai_model"],
@@ -137,21 +129,28 @@ def generate_chatbot_response(openai_client, session_state, user_input):
         ],
         tool_choice="auto",
     )
+
     response_message = stream.choices[0].message
+
     # get the tool calls
     tool_calls = response_message.tool_calls
+
     # if the tool is called to generated report
     if tool_calls and tool_calls[0].function.name == "trigger_report_generation":
+
         # display the message when the report is created
         st.write_stream(
             get_stream(
                 "Got it, here is a plan to create report for this request of yours:"
             )
         )
+
         # get the dataframe of the csv
         result = get_data(session_state.df)
+
         # update the current user input
         session_state.current_user_input = user_input
+
         # generate the plan
         plan = openai_client.chat.completions.create(
             model=session_state["openai_model"],
@@ -160,13 +159,13 @@ def generate_chatbot_response(openai_client, session_state, user_input):
                     "role": "user",
                     "content": user_input
                     + """ \n make a simple plan that is simple to understand without technical terms to create code in python 
-                        to analyze this data(do not include the code), only include the plan as list of steps in the output. 
-                        At the same time, you are also given a list of tools, they are python_repl_tool for writing code, and another one is called web_search for searching on the web for knowledge you do not know. 
-                        Please assign the right tool to do each step, knowing the tools that got activated later will know the output of the previous tools. 
-                        the plan can be hierarchical, meaning that when multiple related and consecutive step can be grouped in one big step and be achieve by the same tool,
-                        you can group under a parent step and have them as sub-steps and only mention the tool recommended for the partent step. try to limit your parent step to be less than 5 steps. 
-                        At the each parent step of the plan, please indicate the tool you recommend in a [] such as [Tool: web_search], and put it at the begining of that step. Do not indicate the tool recommendation for sub-steps
-                        In your output please only give one coherent plan with no analysis
+to analyze this data(do not include the code), only include the plan as list of steps in the output. 
+At the same time, you are also given a list of tools, they are python_repl_tool for writing code, and another one is called web_search for searching on the web for knowledge you do not know. 
+Please assign the right tool to do each step, knowing the tools that got activated later will know the output of the previous tools. 
+the plan can be hierarchical, meaning that when multiple related and consecutive step can be grouped in one big step and be achieve by the same tool,
+you can group under a parent step and have them as sub-steps and only mention the tool recommended for the partent step. try to limit your parent step to be less than 5 steps. 
+At the each parent step of the plan, please indicate the tool you recommend in a [] such as [Tool: web_search], and put it at the begining of that step. Do not indicate the tool recommendation for sub-steps
+In your output please only give one coherent plan with no analysis
                             """
                     + "\n this is the data \n"
                     + result,
@@ -174,8 +173,10 @@ def generate_chatbot_response(openai_client, session_state, user_input):
             ],
             stream=True,
         )
+
         # display the plan
         response = st.write_stream(plan)
+
         # update the plan
         st.write_stream(
             get_stream(
@@ -183,8 +184,10 @@ def generate_chatbot_response(openai_client, session_state, user_input):
             )
         )
         session_state.plan = response
+
     # if a simple data question is asked
     elif tool_calls and tool_calls[0].function.name == "simple_data_analysis":
+
         # call the data agent
         data_agent = create_pandas_dataframe_agent(
             ChatOpenAI(
@@ -194,8 +197,10 @@ def generate_chatbot_response(openai_client, session_state, user_input):
             st.session_state.df,
             verbose=True,
         )
+
         # generate response
         answer = data_agent.invoke(user_input)["output"]
+
         asnwer_reported = openai_client.chat.completions.create(
             model=session_state["openai_model"],
             messages=[
@@ -209,8 +214,10 @@ def generate_chatbot_response(openai_client, session_state, user_input):
             ],
             stream=True,
         )
+
         response = st.write_stream(asnwer_reported)
     elif tool_calls and tool_calls[0].function.name == "simple_data_analysis":
+
         # call the data agent
         data_agent = create_pandas_dataframe_agent(
             ChatOpenAI(
@@ -220,8 +227,10 @@ def generate_chatbot_response(openai_client, session_state, user_input):
             st.session_state.df,
             verbose=True,
         )
+
         # generate response
         answer = data_agent.invoke(user_input)["output"]
+
         asnwer_reported = openai_client.chat.completions.create(
             model=session_state["openai_model"],
             messages=[
@@ -235,7 +244,9 @@ def generate_chatbot_response(openai_client, session_state, user_input):
             ],
             stream=True,
         )
+
         response = st.write_stream(asnwer_reported)
+
     else:
         response = st.write_stream(get_stream(stream.choices[0].message.content))
 
@@ -247,17 +258,9 @@ def execute_plan(plan):
 
     # initialize the tools
     ddg_search = DuckDuckGoSearchResults()
-
-    def _ddg_wrapper(tool_input):
-        if isinstance(tool_input, dict):
-            query = tool_input.get("query") or tool_input.get("input") or tool_input.get("text") or ""
-        else:
-            query = str(tool_input)
-        return ddg_search.run({"query": query})
-
     websearch_tool = Tool(
         name="web_search",
-        func=_ddg_wrapper,
+        func=ddg_search.run,
         description="Useful for when you need to answer questions about current events or the current state of the world, by searching on internet",
     )
 
@@ -286,7 +289,7 @@ Anything of the part of the code that is todo with searching on the internet ple
     You will trigger the corresponding recommneded tool to execute different parent steps along with its substep in one big step.
     and clearly noting down the results from the each steps.
     """
-    # Pull the base prompt (using LangSmith; hub is deprecated)
+    # Pull the base prompt
     base_prompt = hub.pull("langchain-ai/openai-functions-template")
     prompt = base_prompt.partial(instructions=instructions)
 
@@ -307,10 +310,7 @@ Anything of the part of the code that is todo with searching on the internet ple
         + " with this dataseset "
         + st.session_state.df.to_csv()
     )
-    '''
-    result = langgraph_app.invoke({"messages": [HumanMessage(content=input_data)]})
-    langraph_repsonse = result["messages"][-1].content
-    '''
+
     # Execute the agent
     response = agent_executor.invoke({"input": input_data})
 
@@ -384,15 +384,12 @@ Only respond with code as plain text without code block syntax around it. Again,
 if "plan" not in st.session_state:
     st.session_state.plan = ""
 if "code" not in st.session_state:
-    st.session_state.code = """    
+    st.session_state.code = """
 st.write("There is no report created yet, please ask the chatbot to create a report if you need")
 """
 if "thoughtflow" not in st.session_state:
     st.session_state.agent_thoughtflow = ""
-if "kb_chunks" not in st.session_state:
-    st.session_state.kb_chunks = []   # list of {"text":..., "meta":...}
-if "kb_embs" not in st.session_state:
-    st.session_state.kb_embs = None   # np.ndarray shape (n, d), L2-normalized
+
 
 # Below is a method for creating a state variable that auto refreshes on the frontend as the value changes, without the need to manually do st.rerun()
 # Be careful with using it since it uses the special session_state_auto variable, as it could trigger st.rerun() within it and sometimes interrupt other steps.
@@ -421,7 +418,6 @@ session_state_auto.formatted_output = st.session_state.formatted_output
 
 # set the page config
 st.set_page_config(layout="wide")
-
 # Create the main container of the UI
 with st.container():
     # Create two columns for the top row
@@ -463,96 +459,6 @@ with st.container():
                     st.session_state.messages.append(
                         {"role": "assistant", "content": response}
                     )
-
-                    # Orchestrator integration: let user route this input to specialized agents
-                    if st.button("Route with Orchestrator", key="route_orchestrator"):
-                        from langgraph_orchestrator import initialize_orchestrator
-
-                        # Data agent wrapper
-                        class DataAgentWrapper:
-                            def invoke(self, payload):
-                                if isinstance(payload, dict):
-                                    task = payload.get("input") or payload.get("task") or ""
-                                else:
-                                    task = str(payload)
-                                try:
-                                    data_agent = create_pandas_dataframe_agent(
-                                        ChatOpenAI(temperature=0, api_key=OPENAI_API_KEY),
-                                        st.session_state.df,
-                                        verbose=True,
-                                    )
-                                    # langchain pandas agent returns dict or text depending on version
-                                    return data_agent.invoke(task)
-                                except Exception as e:
-                                    return {"error": str(e)}
-
-                        # Execution agent wrapper (reuses execute_plan logic without UI side-effects)
-                        class ExecAgentWrapper:
-                            def invoke(self, payload):
-                                if isinstance(payload, dict):
-                                    task = payload.get("input") or payload.get("task") or ""
-                                else:
-                                    task = str(payload)
-
-                                # initialize the tools
-                                ddg_search = DuckDuckGoSearchResults()
-
-                                def _ddg_wrapper_local(tool_input):
-                                    if isinstance(tool_input, dict):
-                                        query = tool_input.get("query") or tool_input.get("input") or tool_input.get("text") or ""
-                                    else:
-                                        query = str(tool_input)
-                                    return ddg_search.run({"query": query})
-
-                                websearch_tool = Tool(
-                                    name="web_search",
-                                    func=_ddg_wrapper_local,
-                                    description="Search the web",
-                                )
-
-                                python_repl_tool = PythonREPLTool(
-                                    name="python_repl_tool",
-                                    description="Python REPL for running code",
-                                )
-
-                                tools = [python_repl_tool, websearch_tool]
-
-                                instructions_local = "Execute the provided plan using the recommended tools."
-                                base_prompt_local = hub.pull("langchain-ai/openai-functions-template")
-                                prompt_local = base_prompt_local.partial(instructions=instructions_local)
-
-                                agent_local = create_openai_functions_agent(
-                                    ChatOpenAI(temperature=0, openai_api_key=OPENAI_API_KEY),
-                                    tools,
-                                    prompt_local,
-                                )
-
-                                agent_executor_local = AgentExecutor(
-                                    agent=agent_local, tools=tools, verbose=True, return_intermediate_steps=True
-                                )
-
-                                input_data = "execute this plan " + task + " with this dataset " + st.session_state.df.to_csv()
-                                try:
-                                    return agent_executor_local.invoke({"input": input_data})
-                                except Exception as e:
-                                    return {"error": str(e)}
-
-                        # Try to include the code agent if available
-                        registry = {"data": DataAgentWrapper(), "executor": ExecAgentWrapper()}
-                        try:
-                            from langgraph_code_agent import app as code_agent_app
-
-                            registry["code"] = code_agent_app
-                        except Exception:
-                            pass
-
-                        orchestrator = initialize_orchestrator(registry)
-                        out = orchestrator.invoke({"task": user_input})
-                        st.write("Orchestrator chose:", out.get("agent"))
-                        normalized = out.get("normalized_result", {})
-                        st.write("**Answer:**", normalized.get("text", "(no response)"))
-                        if normalized.get("meta", {}).get("error"):
-                            st.error("An error occurred during execution.")
 
     # create the second column in first row
     with col2row1:
@@ -613,59 +519,3 @@ with st.container():
 
             # execute the code
             exec(reporting_code)
-
-
-from langgraph.graph import StateGraph, MessagesState, START, END
-from langgraph.types import Command
-from typing import Literal
-
-class OrchestratorState(MessagesState):
-    task: str
-    agent: str
-    result: Any
-
-def initialize_orchestrator(agent_registry: dict):
-    
-    def classify(state: OrchestratorState) -> Command[Literal["dispatch", "error"]]:
-        """Classify and route"""
-        prompt = f"""Available agents: {', '.join(agent_registry.keys())}.
-        Task: {state.get('task', '')}"""
-        
-        response = model.invoke([HumanMessage(content=prompt)])
-        chosen = response.content.strip()
-        
-        if chosen in agent_registry:
-            # Update state and goto dispatch
-            return Command(
-                update={"agent": chosen},
-                goto="dispatch"
-            )
-        else:
-            # Goto error
-            return Command(goto="error")
-    
-    def dispatch(state: OrchestratorState) -> Command[Literal["__end__"]]:
-        """Dispatch task"""
-        agent = agent_registry.get(state.get("agent"))
-        result = agent.invoke({"task": state.get("task")})
-        return Command(
-            update={"result": result},
-            goto=END
-        )
-    
-    def error(state: OrchestratorState) -> Command[Literal["__end__"]]:
-        """Handle errors"""
-        return Command(
-            update={"result": {"error": "Routing failed"}},
-            goto=END
-        )
-    
-    # Build graph
-    graph = StateGraph(OrchestratorState)
-    graph.add_node("classify", classify)
-    graph.add_node("dispatch", dispatch)
-    graph.add_node("error", error)
-    
-    graph.set_entry_point("classify")
-    
-    return graph.compile()

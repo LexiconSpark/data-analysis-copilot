@@ -4,9 +4,13 @@ from typing import TypedDict
 import streamlit as st
 import pandas as pd
 import random
+import re
+import matplotlib.pyplot as plt
 import time
 import os
+
 from dotenv import load_dotenv
+
 from langchain import hub
 from langchain.agents import AgentExecutor
 from langchain_experimental.tools import PythonREPLTool
@@ -17,17 +21,18 @@ from langchain.tools import Tool
 from langchain_community.tools import DuckDuckGoSearchResults
 from langchain.memory import ConversationBufferMemory
 from langchain.chains import LLMMathChain
-import langsmith
 from langchain_experimental.agents.agent_toolkits import create_pandas_dataframe_agent
 
 
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_openai_functions_agent
-import matplotlib.pyplot as plt
-import re
+
+import langsmith
 from langsmith import Client as LangSmithClient
+
 from streamlit_chat import message
 from streamlit_ace import st_ace
+
 from openai import OpenAI
 
 """NEXT STEPS
@@ -591,15 +596,15 @@ class PrivateState(TypedDict):
 
 def node_1(state: InputState) -> OverallState:
     # Write to OverallState
-    return {"foo": state["user_input"] + " name"}
+    return {"foo": state["user_input"] + "colorless"}
 
 def node_2(state: OverallState) -> PrivateState:
     # Read from OverallState, write to PrivateState
-    return {"bar": state["foo"] + " is"}
+    return {"bar": state["foo"] + " green"}
 
 def node_3(state: PrivateState) -> OutputState:
     # Read from PrivateState, write to OutputState
-    return {"graph_output": state["bar"] + " Lance"}
+    return {"graph_output": state["bar"] + "ideas"}
 
 builder = StateGraph(OverallState,input_schema=InputState,output_schema=OutputState)
 builder.add_node("node_1", node_1)
@@ -611,5 +616,5 @@ builder.add_edge("node_2", "node_3")
 builder.add_edge("node_3", END)
 
 graph = builder.compile()
-graph.invoke({"user_input":"My"})
-# {'graph_output': 'My name is Lance'}
+graph.invoke({"user_input":"colorless green ideas sleep furiously"})
+# {'graph_output': 'colorless green ideas sleep furiouslyideas'}
