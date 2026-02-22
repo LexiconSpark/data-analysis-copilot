@@ -1,4 +1,5 @@
 import os
+import sys
 import ast
 import subprocess
 import tempfile
@@ -124,7 +125,7 @@ def run_tests(code_files: dict) -> dict:
 
             latest_file = list(code_files.keys())[-1]
             result = subprocess.run(
-                ["python", latest_file],
+                [sys.executable, latest_file],
                 cwd=tmpdir, capture_output=True, text=True, timeout=30,
             )
 
@@ -133,9 +134,13 @@ def run_tests(code_files: dict) -> dict:
             if os.path.exists(temp_plot):
                 shutil.copy(temp_plot, os.path.join(os.getcwd(), "plot.png"))
 
+            passed = result.returncode == 0
+            if not passed:
+                print(f"[LG] STDERR: {result.stderr}")
+                print(f"[LG] STDOUT: {result.stdout}")
             return {
-                "passed": result.returncode == 0,
-                "errors": [result.stderr] if result.returncode != 0 else [],
+                "passed": passed,
+                "errors": [result.stderr] if not passed else [],
                 "stdout": result.stdout,
             }
     except subprocess.TimeoutExpired:
