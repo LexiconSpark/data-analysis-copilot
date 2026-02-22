@@ -472,6 +472,14 @@ def execute_plan(plan):
             final_code_files = node_data["code_files"]
 
     status_container.success("✅ Done!")
+
+    if final_code_files:
+        code_block = "\n\n".join(
+            f"```python\n# --- {fname} ---\n{code}\n```"
+            for fname, code in final_code_files.items()
+        )
+        progress_log.append(f"### Final Generated Code\n\n{code_block}")
+
     st.session_state.formatted_output = "\n\n".join(progress_log)
 
     if final_code_files:
