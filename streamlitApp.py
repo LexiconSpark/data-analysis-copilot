@@ -129,12 +129,11 @@ def run_tests(code_files: dict) -> dict:
                 cwd=tmpdir, capture_output=True, text=True, timeout=30,
             )
 
-            # Copy plot.png to workspace if it was generated
-            temp_plot = os.path.join(tmpdir, "plot.png")
-            if os.path.exists(temp_plot):
-                shutil.copy(temp_plot, os.path.join(os.getcwd(), "plot.png"))
-
-            passed = result.returncode == 0
+            # Copy *.png to workspace if it was generated
+            for fname in os.listdir(tmpdir):
+                if fname.endswith(".png"):
+                    shutil.copy(os.path.join(tmpdir, fname), os.path.join(os.getcwd(), fname))
+                    passed = result.returncode == 0
             if not passed:
                 print(f"[LG] STDERR: {result.stderr}")
                 print(f"[LG] STDOUT: {result.stdout}")
@@ -436,7 +435,6 @@ Only respond with code as plain text without code block syntax around it. Again,
 def execute_plan(plan):
     print("[PLAN EXECUTION STARTED]")
     status_container = st.empty()
-    progress_log = []
 
     steps = [line.strip("- •").strip() for line in plan.splitlines() if line.strip()]
     print(f"[PLAN] Total steps to execute: {len(steps)}")
@@ -461,26 +459,21 @@ def execute_plan(plan):
         node_name = list(step_output.keys())[0]
         node_data = step_output[node_name] or {}
 
-        log_entry = f"**✅ {node_name}**"
-        if node_data.get("errors"):
-            log_entry = f"**⚠️ {node_name}** — errors found, retrying..."
-
-        progress_log.append(log_entry)
-        status_container.info(f"⚙️ Running: `{node_name}`")
 
         if node_data.get("code_files"):
             final_code_files = node_data["code_files"]
 
     status_container.success("✅ Done!")
+    formatted_output = ""
 
     if final_code_files:
         code_block = "\n\n".join(
             f"```python\n# --- {fname} ---\n{code}\n```"
             for fname, code in final_code_files.items()
         )
-        progress_log.append(f"### Final Generated Code\n\n{code_block}")
+        formatted_output = f"### Final Generated Code\n\n{code_block}"
 
-    st.session_state.formatted_output = "\n\n".join(progress_log)
+    st.session_state.formatted_output = formatted_output
 
     if final_code_files:
         print(f"\n[RESULTS] Generated {len(final_code_files)} code file(s)")
