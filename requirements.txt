@@ -29,16 +29,15 @@ jsonpointer==3.0.0
 jsonschema==4.22.0
 jsonschema-specifications==2023.12.1
 kiwisolver==1.4.5
-# LangChain 0.3.x (compatible with LangGraph)
-langchain==0.3.27
-langchain-community==0.3.27
-langchain-core==0.3.83
-langchain-experimental==0.3.4
-langchain-openai==0.3.35
-langchain-text-splitters==0.3.11
-langgraph==0.3.18
+langchain==0.2.5
+langchain-community==0.2.5
+langchain-core>=0.2.27,<0.3.0
+langchain-experimental==0.0.61
+langchain-openai==0.1.9
+langchain-text-splitters==0.2.1
 langchainhub==0.1.21
-langsmith==0.7.0
+langgraph>=0.2.3, <0.3.0
+langsmith==0.1.81
 lxml==6.0.2
 markdown-it-py==3.0.0
 MarkupSafe==2.1.5
