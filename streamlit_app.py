@@ -56,7 +56,6 @@ def initialize_environment():
     )
 
 
-# Initialize an OpenAI client, this will be used for handling individual AI tasks in the code as well as chatbot for the the top left cornor
 langsmith_client, openai_client, OPENAI_API_KEY = initialize_environment()
 
 # ========================================
@@ -230,7 +229,10 @@ if "openai_model" not in st.session_state:
     st.session_state["openai_model"] = "gpt-4o"
 
 
-# function to convert a sentence to stream
+# ─────────────────────────────────────────────
+# Shared utility helpers
+# ─────────────────────────────────────────────
+
 def get_stream(sentence):
     for word in sentence.split():
         yield word + " "
@@ -253,7 +255,6 @@ def get_data(placeholder):
     return new_data
 
 
-# This is the function for handling changes in csv
 def handle_table_change():
     if "table_changed" in st.session_state and st.session_state["table_changed"]:
         st.session_state["chat_history"].append(
@@ -274,9 +275,7 @@ def generate_chatbot_response(openai_client, session_state, user_input):
                    for example, create a report of column B and column C and caluclate the correlation between the two columns""",
             }
         ]
-        + [
-            {"role": m["role"], "content": m["content"]} for m in session_state.messages
-        ],
+        + [{"role": m["role"], "content": m["content"]} for m in session_state.messages],
         tools=[
             {
                 "type": "function",
@@ -309,9 +308,7 @@ def generate_chatbot_response(openai_client, session_state, user_input):
 
         # display the message when the report is created
         st.write_stream(
-            get_stream(
-                "Got it, here is a plan to create report for this request of yours:"
-            )
+            get_stream("Got it, here is a plan to create report for this request of yours:")
         )
 
         # get the dataframe of the csv
@@ -323,6 +320,7 @@ def generate_chatbot_response(openai_client, session_state, user_input):
         # generate the plan
         plan = openai_client.chat.completions.create(
             model=session_state["openai_model"],
+            temperature=0,
             messages=[
                 {
                     "role": "user",
@@ -566,11 +564,10 @@ st.write("Please ask the chatbot to create a report or click 'Test Orchestrator 
 
 if "thoughtflow" not in st.session_state:
     st.session_state.agent_thoughtflow = ""
+if "current_user_input" not in st.session_state:
+    st.session_state.current_user_input = ""
 
 
-# Below is a method for creating a state variable that auto refreshes on the frontend as the value changes, without the need to manually do st.rerun()
-# Be careful with using it since it uses the special session_state_auto variable, as it could trigger st.rerun() within it and sometimes interrupt other steps.
-# Find the tutorial of implimentation here: https://discuss.streamlit.io/t/i-created-way-simpler-cleaner-session-state-code-with-auto-refresh/36150
 class SessionStateAutoClass:
     def __setattr__(self, name, value):
         if getattr(self, name, None) != value:
@@ -583,64 +580,50 @@ class SessionStateAutoClass:
 
 session_state_auto = SessionStateAutoClass()
 
-# Initialize session_state_auto.formatted_output as a state variable that auto refreshes on the frontend
 if "formatted_output" not in st.session_state:
     st.session_state.formatted_output = ""
 session_state_auto.formatted_output = st.session_state.formatted_output
 
 
-################################################
-##### Below are all the code to do with UI #####
-################################################
+# ─────────────────────────────────────────────
+# UI
+# ─────────────────────────────────────────────
 
-# set the page config
 st.set_page_config(layout="wide")
 # Create the main container of the UI
 with st.container():
-    # Create two columns for the top row
     col1row1, col2row1 = st.columns(2)
 
-    # Add chatbot to the first quadrant (top-left)
     with col1row1:
         with st.container(height=ROW_HIGHT):
             chat_history_container = st.container(height=ROW_HIGHT - TEXTBOX_HIGHT)
             with chat_history_container:
                 chat_history_container.title("Chatbot")
-                # Initialize chat history if it doesn't exist
                 if "messages" not in st.session_state:
                     st.session_state.messages = []
-                # Display chat messages from history on app rerun
                 for message in st.session_state.messages:
                     with chat_history_container.chat_message(message["role"]):
                         st.markdown(message["content"])
 
             input_textbox_container = st.container()
             with input_textbox_container:
-                # Collect user input via chat
                 user_input = st.chat_input("What is up?")
                 if user_input:
-                    # Display user message in chat message container
                     with chat_history_container.chat_message("user"):
                         st.markdown(user_input)
-                    # Add user message to chat history
                     st.session_state.messages.append(
                         {"role": "user", "content": user_input}
                     )
-
-                    # Display assistant response in chat message container
                     with chat_history_container.chat_message("assistant"):
                         response = generate_chatbot_response(
                             openai_client, st.session_state, user_input
                         )
-                    # Append the assistant's response to the chat history
                     st.session_state.messages.append(
                         {"role": "assistant", "content": response}
                     )
 
-    # create the second column in first row
     with col2row1:
         with st.container(height=ROW_HIGHT):
-            # create the tabs
             col2row1_plan_tab, col2row1_code_tab = st.tabs(["Plan", "Code"])
 
             # display the plan
@@ -677,42 +660,28 @@ with st.container():
                 if st.button("Execute Plan"):
                     execute_plan(st.session_state.plan)
 
-            # display the code for formatting the report
             with col2row1_code_tab:
-                # print out the intermediate steps
                 st.write(session_state_auto.formatted_output)
-
-                # Display code for visualizating report
                 st.write("### Code For Visualizing Report")
                 reporting_code = st_ace(
                     value=st.session_state.code, language="python", theme="monokai"
                 )
-
-                # if the update button is pressed
                 if reporting_code:
                     st.session_state.code = reporting_code
 
-    # create second row
     col1row2, col2row2 = st.columns(2)
 
-    # Add editable table to the third quadrant (bottom-left)
     with col1row2:
         with st.container(height=ROW_HIGHT):
             st.write("### User Data Set")
-
-            # if the dataframe is not in the session state
             if "df" not in st.session_state:
                 st.session_state.df = get_dataframe()
-
-            # display the editable table
             edited_df = st.data_editor(
                 st.session_state.df,
                 key="editable_table",
                 num_rows="dynamic",
                 on_change=handle_table_change,
             )
-
-            # update the dataframe
             st.session_state.df = edited_df
 
    # create the fourth column in second row
