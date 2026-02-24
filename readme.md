@@ -1,6 +1,6 @@
 # Data Analysis Copilot
 
-An AI-powered data analysis assistant built with Streamlit and LangGraph. Upload CSV data, ask questions, and generate visual reports through natural conversation.
+An AI-powered data analysis assistant built with Streamlit and LangGraph, for creating reports, data analysis, and for constantly creating data analysis reports locally. For a real client, circuit board data analysis automation. Upload CSV data, ask questions, and generate visual reports through natural conversation.
 
 Video Walk through of the (earlier version) codebase: https://share.descript.com/view/m0Hx8rH6NC0
 
