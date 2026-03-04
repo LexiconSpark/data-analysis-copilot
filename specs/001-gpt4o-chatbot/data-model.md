@@ -68,6 +68,36 @@ if "messages" not in st.session_state:
 
 ---
 
+## Entity: CSVDataset
+
+The active tabular dataset injected into the LLM system context. Held in `st.session_state`.
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `df` | `pd.DataFrame` | Non-null after init | The active dataset; defaults to `DEFAULT_CSV_DATA` |
+| `csv_truncated` | `bool` | Default `False` | Whether the loaded CSV was truncated at `MAX_CSV_ROWS` |
+
+**Initialization** (in `init_session_state()`):
+```python
+if "df" not in st.session_state:
+    st.session_state.df = pd.DataFrame(DEFAULT_CSV_DATA)
+if "csv_truncated" not in st.session_state:
+    st.session_state.csv_truncated = False
+```
+
+**State transitions**:
+```
+[Default data] → (user uploads CSV) → [Uploaded data]
+               → (user clicks Reset) → [Default data]
+               → (upload fails)      → [Previous data unchanged]
+               → (New Chat)          → [Data unchanged — CSV persists]
+               → (page reload)       → [Default data]
+```
+
+**Row limit**: Files with more than `MAX_CSV_ROWS` (10,000) rows are silently truncated; `csv_truncated` is set to `True` and a sidebar warning is shown.
+
+---
+
 ## Entity: AppConfig
 
 Application-level configuration defined as module-level constants at the top of `app.py`. Not mutable at runtime.
@@ -107,9 +137,10 @@ Set st.session_state.is_loading = True
        │
        ▼
 RunnableWithMessageHistory.invoke(
-    {"input": content},
+    {"input": content, "system_context": build_system_context()},
     config={"configurable": {"session_id": session_id}}
 )
+  # system_context = SYSTEM_PROMPT + CSV data from st.session_state.df
        │
        ▼
 Response text received

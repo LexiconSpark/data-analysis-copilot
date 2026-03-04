@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timezone
 
 import openai
+import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 from langchain_community.chat_message_histories import ChatMessageHistory
@@ -17,6 +18,15 @@ from langchain_openai import ChatOpenAI
 MODEL = "gpt-4o"
 TEMPERATURE = 0.7
 SYSTEM_PROMPT = "You are a helpful assistant."
+LANGSMITH_PROJECT = "data_analysis_copilot"
+
+MAX_CSV_ROWS = 10_000
+
+DEFAULT_CSV_DATA = {
+    "A": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+    "B": [15, 25, 35, 45, 55, 65, 75, 85, 95, 105],
+    "C": [5, 15, 25, 35, 45, 55, 65, 75, 85, 95],
+}
 
 # ---------------------------------------------------------------------------
 # API key (T005)
@@ -40,7 +50,7 @@ if not OPENAI_API_KEY:
 def build_chain() -> RunnableWithMessageHistory:
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", SYSTEM_PROMPT),
+            ("system", "{system_context}"),
             MessagesPlaceholder("history"),
             ("human", "{input}"),
         ]
@@ -64,6 +74,19 @@ def build_chain() -> RunnableWithMessageHistory:
 
 
 # ---------------------------------------------------------------------------
+# CSV context builder
+# ---------------------------------------------------------------------------
+def build_system_context() -> str:
+    csv_text = st.session_state.df.to_csv(index=False)
+    return (
+        f"{SYSTEM_PROMPT}\n\n"
+        "The user has provided the following CSV data. "
+        "Use it when answering questions:\n\n"
+        f"```csv\n{csv_text}\n```"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Session state initialisation (T007)
 # ---------------------------------------------------------------------------
 def init_session_state() -> None:
@@ -75,6 +98,10 @@ def init_session_state() -> None:
         st.session_state.session_id = str(uuid.uuid4())
     if "is_loading" not in st.session_state:
         st.session_state.is_loading = False
+    if "df" not in st.session_state:
+        st.session_state.df = pd.DataFrame(DEFAULT_CSV_DATA)
+    if "csv_truncated" not in st.session_state:
+        st.session_state.csv_truncated = False
 
 
 # ---------------------------------------------------------------------------
@@ -106,9 +133,52 @@ def render_conversation() -> None:
 # ---------------------------------------------------------------------------
 def get_ai_response(prompt: str) -> str:
     return build_chain().invoke(
-        {"input": prompt},
-        config={"configurable": {"session_id": st.session_state.session_id}},
+        {"input": prompt, "system_context": build_system_context()},
+        config={
+            "configurable": {"session_id": st.session_state.session_id},
+            "run_name": "csv-chat",
+            "tags": ["streamlit", "csv-context"],
+            "metadata": {
+                "session_id": st.session_state.session_id,
+                "csv_rows": len(st.session_state.df),
+                "csv_cols": len(st.session_state.df.columns),
+            },
+        },
     )
+
+
+# ---------------------------------------------------------------------------
+# Sidebar: CSV data display and upload
+# ---------------------------------------------------------------------------
+def render_sidebar() -> None:
+    with st.sidebar:
+        st.header("CSV Data")
+        uploaded = st.file_uploader("Upload a CSV file", type=["csv"])
+        if uploaded is not None:
+            try:
+                df = pd.read_csv(uploaded)
+                if len(df) > MAX_CSV_ROWS:
+                    df = df.iloc[:MAX_CSV_ROWS]
+                    st.session_state.csv_truncated = True
+                else:
+                    st.session_state.csv_truncated = False
+                st.session_state.df = df
+            except Exception:
+                st.error("Could not parse the uploaded file. Please upload a valid CSV.")
+
+        if st.button("Reset to default data"):
+            st.session_state.df = pd.DataFrame(DEFAULT_CSV_DATA)
+            st.session_state.csv_truncated = False
+
+        if st.session_state.csv_truncated:
+            st.warning(f"CSV truncated to {MAX_CSV_ROWS:,} rows.")
+
+        st.dataframe(st.session_state.df, use_container_width=True)
+        rows, cols = st.session_state.df.shape
+        st.caption(f"{rows:,} rows × {cols} columns")
+
+        tracing_on = os.getenv("LANGSMITH_TRACING", "").lower() == "true"
+        st.caption(f"Tracing: {'✓ LangSmith' if tracing_on else 'off'}")
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +198,7 @@ def format_error(exc: Exception) -> str:
 # Main app body
 # ---------------------------------------------------------------------------
 init_session_state()
+render_sidebar()
 
 # Header with New Chat button (T017)
 col1, col2 = st.columns([4, 1])

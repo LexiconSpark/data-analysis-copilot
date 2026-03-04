@@ -155,6 +155,83 @@ python-dotenv>=1.0.0
 
 ---
 
+## Decision 8: CSV Context Injection Pattern
+
+**Decision**: Change the LangChain prompt template's system slot from a hardcoded string to `{system_context}` and pass the assembled string at every `.invoke()` call.
+
+**Rationale**: The chain is `@st.cache_resource` (built once per app process). Baking CSV data into the cached chain would require a chain rebuild on every upload, losing `@st.cache_resource` benefits and resetting the `RunnableWithMessageHistory` history object. Passing `system_context` as a runtime template variable keeps the chain stateless and cached while letting CSV data flow in per-invoke.
+
+**Implementation**:
+```python
+# Prompt template
+("system", "{system_context}")
+
+# At invoke time
+chain.invoke({"input": prompt, "system_context": build_system_context()})
+
+# Context builder reads from session state
+def build_system_context() -> str:
+    csv_text = st.session_state.df.to_csv(index=False)
+    return f"{SYSTEM_PROMPT}\n\nCSV data:\n```csv\n{csv_text}\n```"
+```
+
+**Alternatives considered**:
+- Rebuild chain on CSV upload — drops `@st.cache_resource`, resets history
+- Prepend CSV as a human message — pollutes conversation thread and history
+
+---
+
+## Decision 9: CSV Display + Upload Location
+
+**Decision**: Sidebar (`st.sidebar`) with `st.file_uploader`, `st.dataframe`, and a "Reset to default data" button.
+
+**Rationale**: `layout="centered"` gives the chat a fixed-width column; placing a dataframe above the chat would push the input down. The sidebar is the established Streamlit pattern for auxiliary data panels, keeping the chat uncluttered.
+
+---
+
+## Decision 10: Default CSV Data
+
+**Decision**: Define `DEFAULT_CSV_DATA` as a module-level dict constant. Convert to `pd.DataFrame` during `init_session_state()`. Always pre-loaded at startup.
+
+**Rationale**: The user always has data context from message one. No empty-state handling needed. Users can override with upload or revert with the "Reset" button.
+
+---
+
+## Decision 11: LangSmith Tracing
+
+**Decision**: Enable tracing via environment variables only (`LANGSMITH_TRACING=true`, `LANGSMITH_API_KEY`). Enhance trace quality by passing `run_name`, `tags`, and `metadata` in the LangChain `.invoke()` config.
+
+**Rationale**: LangChain 0.3+ automatically emits traces to LangSmith when the env vars are present — no SDK calls or code wrappers are required. Tracing is therefore fully opt-in: setting the vars enables it, omitting them disables it, with zero impact on the app's behaviour either way. Adding `metadata` (session_id, CSV shape) and `tags` costs nothing and makes traces searchable in the LangSmith UI.
+
+**Environment variables** (added to `.env.example`):
+```
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=ls__your-key-here
+LANGSMITH_PROJECT=data-analysis-copilot
+```
+
+**Code addition** (in `get_ai_response()`):
+```python
+config={
+    "configurable": {"session_id": st.session_state.session_id},
+    "run_name": "csv-chat",
+    "tags": ["streamlit", "csv-context"],
+    "metadata": {
+        "session_id": st.session_state.session_id,
+        "csv_rows": len(st.session_state.df),
+        "csv_cols": len(st.session_state.df.columns),
+    },
+}
+```
+
+**Package**: `langsmith>=0.1.0` added to `requirements.txt` (it is a transitive dependency of LangChain but made explicit).
+
+**Alternatives considered**:
+- Manual `@traceable` decorator — not needed; LCEL chain is already auto-traced
+- Programmatic `langsmith.Client()` — adds complexity with no benefit over env var approach
+
+---
+
 ## Decision 7: Error Handling Strategy
 
 **Decision**: Catch API exceptions in Streamlit and display `st.error()` with a retry option; disable the input during response generation.
