@@ -26,6 +26,7 @@ uv tool install specify-cli --from git+https://github.com/github/spec-kit.git
 specify init --here
 ```
 Note: if your terminal does not recognize the "specify" command at this step, you might need to add the specify command into the system environment variable. 
+
 Afterwards select claude code, then select sh (if you are on macOS/Linux)
 
 # Run in claude code
