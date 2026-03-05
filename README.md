@@ -32,6 +32,7 @@ Afterwards select claude code, then select sh (if you are on macOS/Linux)
 ## Implement the initial project
 Launch claude code in the project directory. The `/speckit.*` commands are available in the assistant.
 
+Note: Further tutorial to followthrough for using speckit: https://github.com/github/spec-kit
  
 Use the **`/speckit.constitution`** command to create your project's governing principles and development guidelines that will guide all subsequent development.
 
