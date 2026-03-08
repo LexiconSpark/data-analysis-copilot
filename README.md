@@ -40,7 +40,7 @@ Use the **`/speckit.constitution`** command to create your project's governing p
 
 ```bash
 
-/speckit.constitution Create principles focused on code quality, testing standards, user experience consistency, and performance requirements. Project is in Python.
+/speckit.constitution Create principles focused on code quality, testing standards, user experience consistency, and performance requirements. Project is in Python 3.12.
 ```
 
 Here's the full conversation history for this session:
@@ -49,7 +49,7 @@ Here's the full conversation history for this session:
 /speckit.specify Build a conversational chatbot using OpenAI GPT-4o with conversation memory and it should have a simple interface
 ```
 ```
-/speckit.plan This chatbot should run in streamlit and use langchain architecture for its implementation. Model and temperature can be specified in the file.
+/speckit.plan This chatbot should run in streamlit and use langchain architecture for its implementation. Model and temperature can be specified in the file. Have all the python code in App.py 
 ```
 ```
 /speckit.clarify why is there config.toml file
@@ -60,7 +60,10 @@ Here's the full conversation history for this session:
 ```
 /speckit.implement
 ```
-
+Run this command in the terminal, to start and test the app:
+```
+streamlit run app.py
+```
 After implementing this if there are any errors, please use claude code to fix the bugs, you don't need to use speckit
 
 
@@ -76,7 +79,11 @@ After implementing this if there are any errors, please use claude code to fix t
 ```
 /speckit.implement
 ```
-
+Run this command in the terminal, to start and test the app:
+```
+streamlit run app.py
+```
+After implementing this if there are any errors, please use claude code to fix the bugs, you don't need to use speckit
 ### Add csv
 ```
 /speckit.plan I want to extend this app by adding a csv to the context - either user can upload a csv or use the default csv data
@@ -91,7 +98,11 @@ and it is passed as context for the chatbot. The csv data should also be display
 ```
 /speckit.implement
 ```
-
+Run this command in the terminal, to start and test the app:
+```
+streamlit run app.py
+```
+After implementing this if there are any errors, please use claude code to fix the bugs, you don't need to use speckit
 ### Update UI (with 4 quadrants)
 ```
 /speckit.specify We’re building an AI data analyst copilot for companies and engineers who need to analyze CSV data through code, generate reports, and interact through a chatbot interface.
@@ -114,6 +125,11 @@ Bottom right: placeholder for analysis results in the future
 ```
 /speckit.implement
 ```
+Run this command in the terminal, to start and test the app:
+```
+streamlit run app.py
+```
+After implementing this if there are any errors, please use claude code to fix the bugs, you don't need to use speckit
 ### Implement the langgraph logic 
 With the following process, with one "specify" and two "plan", we are breaking down one big task of implementation into two small steps of implementation:
 1. With the first step plan, we created a simple interface. We make the simple interface to work, and we created a simple two-agent. Without human in the loop
@@ -162,6 +178,13 @@ UI: all quadrant layout, borders, and tab behavior go in this session. Templates
 ```
 /speckit.implement
 ```
+Run this command in the terminal, to start and test the app:
+```
+streamlit run app.py
+```
+After this step, now your app should be able to generate simple reports, but it's not able to handle complex code logic, cannot debug itself, and cannot take human-in-the-loop feedback for the plan generated
+After implementing this if there are any errors, please use claude code to fix the bugs, you don't need to use speckit
+
 ```
 /speckit.plan-step2 — Interrupt, Retry & Cancellation
 
@@ -184,3 +207,9 @@ Also wire the Save as Template button on the Plan tab — it should be available
 ```
 /speckit.implement
 ```
+Run this command in the terminal, to start and test the app:
+```
+streamlit run app.py
+```
+After this step, now you should be able to have a fully working app that has a human in the loop and is able to iterate on the code itself. Fix bugs in the code itself 
+After implementing this if there are any errors, please use claude code to fix the bugs, you don't need to use speckit
