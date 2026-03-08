@@ -18,6 +18,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, START, END
+from langgraph.types import interrupt, Command
 from pydantic import BaseModel, Field
 
 matplotlib.use("Agg")
@@ -79,6 +80,7 @@ class AnalysisState(TypedDict):
     # Control
     cancelled: bool  # Whether user cancelled (reserved for Session 2)
     error: Optional[str]  # Unrecoverable error message
+    plan_revised: bool  # True after node_revise_plan has run (prevents infinite revise loop)
 
     # Session 2 (Reserved)
     templates: list[dict]  # Session-scoped saved templates
@@ -255,6 +257,14 @@ def init_session_state() -> None:
     if "active_tab" not in st.session_state:
         st.session_state.active_tab = "templates"  # Default to Templates tab
 
+    # Session 2: Plan approval with interrupt/resume
+    if "awaiting_approval" not in st.session_state:
+        st.session_state.awaiting_approval = False
+    if "awaiting_approval_thread_id" not in st.session_state:
+        st.session_state.awaiting_approval_thread_id = None
+    if "plan_steps_pending" not in st.session_state:
+        st.session_state.plan_steps_pending = []  # Steps shown in Plan tab during approval
+
 
 # ---------------------------------------------------------------------------
 # T010 — Session reset (New Chat)
@@ -267,6 +277,9 @@ def reset_session() -> None:
     st.session_state.plan_steps = []
     st.session_state.plan_code = ""
     st.session_state.analysis_result = None
+    st.session_state.awaiting_approval = False
+    st.session_state.awaiting_approval_thread_id = None
+    st.session_state.plan_steps_pending = []
 
 
 # ---------------------------------------------------------------------------
@@ -345,7 +358,6 @@ def execute_code(code: str, df: pd.DataFrame) -> dict:
             artifacts_dir.mkdir(exist_ok=True)
             fig_path = artifacts_dir / "result_figure.png"
             fig.savefig(fig_path, dpi=100, bbox_inches="tight")
-            print(f"[DEBUG] Figure saved to: {fig_path}")
             plt.close("all")
             return {"output_type": "figure", "content": str(fig_path), "error": None}
         result_val = namespace.get("result")
@@ -364,6 +376,8 @@ def execute_code(code: str, df: pd.DataFrame) -> dict:
 # ---------------------------------------------------------------------------
 def node_generate_plan(state: AnalysisState) -> AnalysisState:
     """Generate analysis plan using LLM (T010)."""
+    if state.get("cancelled"):
+        return state
     try:
         # Build prompt for plan generation
         prompt_text = f"""Generate a numbered step-by-step analysis plan for this question:
@@ -397,16 +411,35 @@ Each step should be executable and specific."""
     return state
 
 
-def node_auto_approve(state: AnalysisState) -> AnalysisState:
-    """Auto-approve plan (Session 1) or interrupt for approval (Session 2)."""
-    # Session 1: Auto-approve
-    state["plan_approved"] = True
-    return state
+def node_await_approval(state: AnalysisState) -> Command:
+    """Interrupt for plan approval (Session 2)."""
+    if state.get("cancelled"):
+        return Command(update={}, goto=END)
+    resume_value = interrupt({"plan_steps": state["plan_steps"]})
+    if resume_value.get("action") == "approve":
+        new_steps = resume_value.get("plan_steps", state["plan_steps"])
+        return Command(update={"plan_approved": True, "plan_steps": new_steps}, goto="generate_code")
+    else:  # cancel
+        return Command(update={"plan_approved": False, "cancelled": True}, goto=END)
 
 
 def node_generate_code(state: AnalysisState) -> AnalysisState:
     """Generate executable Python code for the plan (T012)."""
+    if state.get("cancelled"):
+        return state
     try:
+        retry_count = state.get("retry_count", 0)
+        retry_context = ""
+        if retry_count > 0 and state.get("execution_result", {}).get("error"):
+            prev_error = state["execution_result"]["error"]
+            retry_context = f"""
+IMPORTANT - Previous attempt failed: {prev_error}
+Previous code:
+```python
+{state.get('code', '')}
+```
+Fix this error in the rewritten code.
+"""
         plan_text = "\n".join(
             f"{i + 1}. {step}" for i, step in enumerate(state["plan_steps"])
         )
@@ -424,7 +457,7 @@ IMPORTANT: Available libraries in the execution environment:
 - matplotlib.pyplot as plt (plotting)
 - seaborn as sns (statistical plotting)
 - scipy (scientific computing)
-- scikit-learn (machine learning)
+- scikit-learn (machine learning){retry_context}
 
 Generate Python code that:
 - ONLY uses the libraries listed above
@@ -443,7 +476,6 @@ Generate Python code that:
         )
         if hasattr(response, "code"):
             state["code"] = response.code
-            print(f"[DEBUG-NODE] generate_code: Code length: {len(state['code'])}")
         else:
             state["code"] = response.chat_reply
     except Exception as e:
@@ -451,28 +483,56 @@ Generate Python code that:
     return state
 
 
-def node_execute_code(state: AnalysisState) -> AnalysisState:
-    """Execute generated code and capture results (T013)."""
+def node_execute_code(state: AnalysisState) -> Command:
+    """Execute generated code and route to retry, revise, or render (T013)."""
+    if state.get("cancelled"):
+        return Command(update={}, goto=END)
     try:
-        # Clear artifacts before execution
         clear_artifacts()
-        # Execute code
         result = execute_code(state["code"], st.session_state.df)
-        state["execution_result"] = result
-        # Session 1: record error but don't retry (retry is Session 2)
     except Exception as e:
-        state["execution_result"] = {
-            "output_type": "none",
-            "content": None,
-            "error": str(e),
-        }
-    return state
+        result = {"output_type": "none", "content": None, "error": str(e)}
+
+    has_error = bool(result.get("error"))
+    new_retry_count = state.get("retry_count", 0) + (1 if has_error else 0)
+
+    if not has_error:
+        return Command(update={"execution_result": result}, goto="render_report")
+    if new_retry_count < 3:
+        return Command(update={"execution_result": result, "retry_count": new_retry_count}, goto="generate_code")
+    if not state.get("plan_revised"):
+        return Command(update={"execution_result": result, "retry_count": new_retry_count}, goto="revise_plan")
+    return Command(update={"execution_result": result, "retry_count": new_retry_count,
+                            "error": f"Code failed after plan revision: {result['error']}"}, goto="render_report")
+
+
+def node_revise_plan(state: AnalysisState) -> Command:
+    """Revise plan after code failure and restart code generation (Session 2)."""
+    if state.get("cancelled"):
+        return Command(update={}, goto=END)
+    try:
+        prev_error = (state.get("execution_result") or {}).get("error", "Unknown error")
+        original_plan = "\n".join(f"{i+1}. {s}" for i, s in enumerate(state["plan_steps"]))
+        response = build_chain().invoke({
+            "input": f"This plan failed with error '{prev_error}':\n{original_plan}\nRevise it to use a simpler approach.",
+            "system_context": "You are a data analysis expert. Revise the plan to avoid the error.",
+            "history": [],
+        })
+        new_steps = response.plan_steps if (hasattr(response, "plan_steps") and response.plan_steps) else [
+            l.strip() for l in response.chat_reply.split("\n") if l.strip() and l[0].isdigit()
+        ]
+        st.session_state.plan_steps = new_steps  # Update UI immediately
+        return Command(update={"plan_steps": new_steps, "plan_revised": True, "retry_count": 0,
+                                "error": None, "execution_result": None}, goto="generate_code")
+    except Exception as e:
+        return Command(update={"plan_revised": True, "error": f"Plan revision failed: {e}"}, goto="render_report")
 
 
 def node_render_report(state: AnalysisState) -> AnalysisState:
     """Generate report summary and execution blocks (T014)."""
+    if state.get("cancelled"):
+        return state
     try:
-        print("[DEBUG-NODE] render_report: Starting")
         # Generate summary
         summary_prompt = f"""Summarize the results of this analysis in 1-2 sentences:
 
@@ -505,8 +565,6 @@ Results: {str(state['execution_result'].get('content', 'No output'))[:500]}"""
             }
         ]
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         state["error"] = f"Report generation failed: {str(e)}"
     return state
 
@@ -517,17 +575,19 @@ def build_analysis_graph():
 
     # Add nodes
     graph.add_node("generate_plan", node_generate_plan)
-    graph.add_node("auto_approve", node_auto_approve)
+    graph.add_node("await_approval", node_await_approval)
     graph.add_node("generate_code", node_generate_code)
     graph.add_node("execute_code", node_execute_code)
+    graph.add_node("revise_plan", node_revise_plan)
     graph.add_node("render_report", node_render_report)
 
     # Add edges (straight-line flow with Command + goto routing)
     graph.add_edge(START, "generate_plan")
-    graph.add_edge("generate_plan", "auto_approve")
-    graph.add_edge("auto_approve", "generate_code")
+    graph.add_edge("generate_plan", "await_approval")
+    # await_approval → generate_code or END (via Command)
     graph.add_edge("generate_code", "execute_code")
-    graph.add_edge("execute_code", "render_report")
+    # execute_code → generate_code | revise_plan | render_report (via Command)
+    # revise_plan → generate_code (via Command)
     graph.add_edge("render_report", END)
 
     # Compile with checkpointer (per-session)
@@ -566,6 +626,10 @@ def render_chat_panel(col) -> None:
                         try:
                             # Invoke LangGraph analysis workflow (T015)
                             graph = build_analysis_graph()
+                            run_thread_id = str(uuid.uuid4())
+                            st.session_state.awaiting_approval_thread_id = run_thread_id
+                            config = {"configurable": {"thread_id": run_thread_id}}
+
                             initial_state = {
                                 "user_query": last_user_msg,
                                 "df_csv": st.session_state.df.to_csv(index=False),
@@ -578,42 +642,39 @@ def render_chat_panel(col) -> None:
                                 "execution_blocks": [],
                                 "cancelled": False,
                                 "error": None,
+                                "plan_revised": False,
                                 "templates": [],
                             }
-                            print(f"[DEBUG] Initial state: {list(initial_state.keys())}")
-                            result = graph.invoke(
-                                initial_state,
-                                config={
-                                    "run_name": "analysis-workflow",
-                                    "thread_id": st.session_state.thread_id,
-                                },
-                            )
-                            print(f"[DEBUG] Result type: {type(result)}")
-                            print(f"[DEBUG] Result keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
-                            print(f"[DEBUG] Report summary: {result.get('report_summary', 'MISSING')[:100] if isinstance(result, dict) else 'N/A'}")
-                            print(f"[DEBUG] Execution blocks count: {len(result.get('execution_blocks', [])) if isinstance(result, dict) else 'N/A'}")
-                            print(f"[DEBUG] Error field: {result.get('error', 'None') if isinstance(result, dict) else 'N/A'}")
 
-                            st.session_state.graph_run_state = result
-                            st.session_state.plan_steps = result.get("plan_steps", [])
-                            st.session_state.plan_code = result.get("code", "")
-                            st.session_state.analysis_result = result.get(
-                                "execution_result"
-                            )
-                            st.session_state.active_tab = "code"  # Auto-switch to Code tab
-                            response = (
-                                result.get("report_summary")
-                                or "Analysis complete. See Code tab for details."
-                            )
+                            result = graph.invoke(initial_state, config=config)
+
+                            # Detect interrupt: graph.get_state(config).next is non-empty when paused
+                            graph_snapshot = graph.get_state(config)
+                            is_interrupted = bool(graph_snapshot.next)
+
+                            if is_interrupted:
+                                st.session_state.awaiting_approval = True
+                                st.session_state.plan_steps = result.get("plan_steps", [])
+                                st.session_state.plan_steps_pending = result.get("plan_steps", [])
+                                response = None  # Don't append message yet; wait for approval
+                            else:
+                                st.session_state.graph_run_state = result
+                                st.session_state.plan_steps = result.get("plan_steps", [])
+                                st.session_state.plan_code = result.get("code", "")
+                                st.session_state.analysis_result = result.get("execution_result")
+                                st.session_state.awaiting_approval = False
+                                st.session_state.awaiting_approval_thread_id = None
+                                if result.get("cancelled"):
+                                    response = "Analysis cancelled."
+                                else:
+                                    st.session_state.active_tab = "code"
+                                    response = result.get("report_summary") or "Analysis complete. See Code tab for details."
                         except Exception as exc:
-                            print(f"[DEBUG] Exception in graph.invoke(): {type(exc).__name__}: {str(exc)}")
-                            import traceback
-                            traceback.print_exc()
                             error_msg = format_error(exc)
 
                 if error_msg:
                     st.error(error_msg)
-                else:
+                elif response:  # Only append if not waiting for approval
                     st.session_state.messages.append(
                         {
                             "role": "assistant",
@@ -623,6 +684,9 @@ def render_chat_panel(col) -> None:
                     )
                 st.session_state.is_loading = False
                 st.rerun()
+
+        if st.session_state.awaiting_approval:
+            st.warning("Plan ready for review. Open the **Plan tab** → to approve or cancel.")
 
         if prompt := st.chat_input("Ask about your data…"):
             if prompt.strip():
@@ -680,23 +744,118 @@ def render_tabs_panel(col) -> None:
                 st.success("Template saved!")
                 st.rerun()
 
-        # T016 — Plan tab
+        # T016 — Plan tab (approval mode in Session 2, view mode otherwise)
         with tab_plan:
-            if st.session_state.plan_steps:
+            if st.session_state.awaiting_approval:
+                # APPROVAL MODE: editable steps + Approve/Cancel buttons
+                st.info("Review and edit the plan, then approve or cancel.")
+                plan_steps_pending = st.session_state.plan_steps_pending or st.session_state.plan_steps
+
+                # Editable text inputs for each step
+                edited_steps = []
+                for i, step in enumerate(plan_steps_pending):
+                    edited_step = st.text_input(
+                        f"Step {i + 1}",
+                        value=step,
+                        key=f"plan_step_edit_{i}",
+                    )
+                    edited_steps.append(edited_step)
+
+                st.divider()
+
+                # Save as Template section
+                st.markdown("#### Save as Template")
+                template_name = st.text_input(
+                    "Template name",
+                    key="tmpl_name_approval",
+                    placeholder="e.g. Correlation Analysis",
+                )
+                if st.button("Save as Template", key="save_tmpl_approval"):
+                    save_template(
+                        template_name.strip() or "Untitled",
+                        edited_steps,
+                        st.session_state.plan_code,
+                    )
+                    st.success("Template saved!")
+
+                st.divider()
+
+                # Approve and Cancel buttons
+                col_approve, col_cancel = st.columns(2)
+                with col_approve:
+                    if st.button("✓ Approve Plan", type="primary", use_container_width=True):
+                        # Resume graph with edited steps
+                        try:
+                            graph = build_analysis_graph()
+                            config = {"configurable": {"thread_id": st.session_state.awaiting_approval_thread_id}}
+                            result = graph.invoke(
+                                Command(resume={"action": "approve", "plan_steps": edited_steps}),
+                                config=config,
+                            )
+                            st.session_state.graph_run_state = result
+                            st.session_state.plan_steps = result.get("plan_steps", [])
+                            st.session_state.plan_code = result.get("code", "")
+                            st.session_state.analysis_result = result.get("execution_result")
+                            st.session_state.awaiting_approval = False
+                            st.session_state.awaiting_approval_thread_id = None
+
+                            if result.get("cancelled"):
+                                response = "Analysis cancelled."
+                            else:
+                                st.session_state.active_tab = "code"
+                                response = result.get("report_summary") or "Analysis complete. See Code tab for details."
+
+                            st.session_state.messages.append({
+                                "role": "assistant",
+                                "content": response,
+                                "timestamp": datetime.now(timezone.utc).isoformat(),
+                            })
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error resuming analysis: {str(e)}")
+
+                with col_cancel:
+                    if st.button("✗ Cancel", use_container_width=True):
+                        st.session_state.awaiting_approval = False
+                        st.session_state.awaiting_approval_thread_id = None
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "content": "Analysis cancelled.",
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        })
+                        st.rerun()
+
+            elif st.session_state.plan_steps:
+                # VIEW MODE: read-only plan display
                 st.markdown("### Analysis Plan")
                 for i, step in enumerate(st.session_state.plan_steps, 1):
                     st.write(f"{i}. {step}")
-                # Note: Approve button wired in Session 2 for manual approval
-                st.caption("Plan auto-approved in Session 1")
+
+                st.divider()
+
+                # Save as Template section in view mode
+                st.markdown("#### Save as Template")
+                template_name = st.text_input(
+                    "Template name",
+                    key="tmpl_name_view",
+                    placeholder="e.g. Correlation Analysis",
+                )
+                if st.button("Save as Template", key="save_tmpl_view"):
+                    save_template(
+                        template_name.strip() or "Untitled",
+                        st.session_state.plan_steps,
+                        st.session_state.plan_code,
+                    )
+                    st.success("Template saved!")
+
             else:
+                # EMPTY STATE
                 st.info("Send a data analysis question in the chat to generate a plan.")
 
         # T016, T017 — Code tab with execution blocks and report (always visible)
         with tab_code:
             if st.session_state.graph_run_state:
                 state = st.session_state.graph_run_state
-                # DEBUG: Show state structure
-                print(f"[DEBUG-UI] Code tab: state type={type(state)}, has_report={bool(state.get('report_summary'))}, blocks_count={len(state.get('execution_blocks', []))}")
 
                 # Display report summary at top
                 if state.get("report_summary"):
