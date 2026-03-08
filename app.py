@@ -154,7 +154,7 @@ def build_system_context() -> str:
 # ---------------------------------------------------------------------------
 def clear_artifacts() -> None:
     """Clear artifacts folder (charts from previous runs)."""
-    artifacts_dir = Path("artifacts")
+    artifacts_dir = Path(__file__).parent / "artifacts"
     if artifacts_dir.exists():
         for file in artifacts_dir.glob("*"):
             try:
@@ -165,7 +165,7 @@ def clear_artifacts() -> None:
 
 def save_template(name: str, plan_steps: list, code: str) -> str:
     """Save analysis template as JSON. Returns template_id."""
-    templates_dir = Path("templates")
+    templates_dir = Path(__file__).parent / "templates"
     templates_dir.mkdir(exist_ok=True)
     template_id = str(uuid.uuid4())
     template_data = {
@@ -181,7 +181,7 @@ def save_template(name: str, plan_steps: list, code: str) -> str:
 
 def load_templates() -> list:
     """Load all templates from JSON files."""
-    templates_dir = Path("templates")
+    templates_dir = Path(__file__).parent / "templates"
     templates = []
     if templates_dir.exists():
         for json_file in sorted(templates_dir.glob("*.json"), reverse=True):
@@ -198,7 +198,7 @@ def load_templates() -> list:
 def load_template(template_id: str) -> Optional[dict]:
     """Load a specific template by ID."""
     try:
-        template_file = Path("templates") / f"{template_id}.json"
+        template_file = Path(__file__).parent / "templates" / f"{template_id}.json"
         if template_file.exists():
             with open(template_file) as f:
                 return json.load(f)
@@ -212,9 +212,13 @@ def load_template(template_id: str) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 def init_session_state() -> None:
     # Create runtime directories (T002, T003)
-    Path("artifacts").mkdir(exist_ok=True)
-    Path("templates").mkdir(exist_ok=True)
-    clear_artifacts()  # Clear artifacts on app startup
+    (Path(__file__).parent / "artifacts").mkdir(exist_ok=True)
+    (Path(__file__).parent / "templates").mkdir(exist_ok=True)
+
+    # Only clear artifacts once at session start, not on every rerun
+    if "artifacts_cleared" not in st.session_state:
+        clear_artifacts()
+        st.session_state.artifacts_cleared = True
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -313,7 +317,22 @@ def get_ai_response(prompt: str) -> str:
 # T022 — Code execution with isolated namespace
 # ---------------------------------------------------------------------------
 def execute_code(code: str, df: pd.DataFrame) -> dict:
-    namespace: dict = {"df": df, "pd": pd, "plt": plt, "np": np, "sns": sns}
+    # Import scipy and scikit-learn for code execution
+    import scipy  # noqa: F401
+    from sklearn import preprocessing, metrics, ensemble, decomposition  # noqa: F401
+
+    namespace: dict = {
+        "df": df,
+        "pd": pd,
+        "plt": plt,
+        "np": np,
+        "sns": sns,
+        "scipy": scipy,
+        "preprocessing": preprocessing,
+        "metrics": metrics,
+        "ensemble": ensemble,
+        "decomposition": decomposition,
+    }
     try:
         exec(code, namespace)  # noqa: S102
         # Prefer explicitly assigned `fig`; fall back to any open figure
@@ -321,9 +340,14 @@ def execute_code(code: str, df: pd.DataFrame) -> dict:
             plt.gcf() if plt.get_fignums() else None
         )
         if fig is not None:
-            result = {"output_type": "figure", "content": fig, "error": None}
+            # Save figure to file instead of storing in state (msgpack can't serialize Figure objects)
+            artifacts_dir = Path(__file__).parent / "artifacts"
+            artifacts_dir.mkdir(exist_ok=True)
+            fig_path = artifacts_dir / "result_figure.png"
+            fig.savefig(fig_path, dpi=100, bbox_inches="tight")
+            print(f"[DEBUG] Figure saved to: {fig_path}")
             plt.close("all")
-            return result
+            return {"output_type": "figure", "content": str(fig_path), "error": None}
         result_val = namespace.get("result")
         if isinstance(result_val, pd.DataFrame):
             return {"output_type": "dataframe", "content": result_val, "error": None}
@@ -394,21 +418,32 @@ Plan:
 Data Info:
 {state['df_csv'][:500]}...
 
+IMPORTANT: Available libraries in the execution environment:
+- pandas as pd (DataFrame operations)
+- numpy as np (numerical operations)
+- matplotlib.pyplot as plt (plotting)
+- seaborn as sns (statistical plotting)
+- scipy (scientific computing)
+- scikit-learn (machine learning)
+
 Generate Python code that:
-- Uses pandas (pd), matplotlib (plt)
+- ONLY uses the libraries listed above
+- Do NOT use pd.np (deprecated) - use np directly instead
 - Stores any figure in variable named `fig`
-- Stores results in variable named `result`
-- Is complete and runnable"""
+- Stores results in variable named `result` (DataFrame or text)
+- Is complete and executable
+- No imports needed (all libraries pre-imported)"""
 
         response = build_chain().invoke(
             {
                 "input": prompt_text,
-                "system_context": "You are a Python data analysis expert. Generate production-quality code.",
+                "system_context": "You are a Python data analysis expert. Generate production-quality code that works with the available libraries. NEVER use deprecated patterns like pd.np.",
                 "history": [],
             }
         )
         if hasattr(response, "code"):
             state["code"] = response.code
+            print(f"[DEBUG-NODE] generate_code: Code length: {len(state['code'])}")
         else:
             state["code"] = response.chat_reply
     except Exception as e:
@@ -437,6 +472,7 @@ def node_execute_code(state: AnalysisState) -> AnalysisState:
 def node_render_report(state: AnalysisState) -> AnalysisState:
     """Generate report summary and execution blocks (T014)."""
     try:
+        print("[DEBUG-NODE] render_report: Starting")
         # Generate summary
         summary_prompt = f"""Summarize the results of this analysis in 1-2 sentences:
 
@@ -469,13 +505,14 @@ Results: {str(state['execution_result'].get('content', 'No output'))[:500]}"""
             }
         ]
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         state["error"] = f"Report generation failed: {str(e)}"
     return state
 
 
-@st.cache_resource
 def build_analysis_graph():
-    """Build LangGraph state graph (T007)."""
+    """Build LangGraph state graph (T007). NOT cached - must use session checkpointer."""
     graph = StateGraph(AnalysisState)
 
     # Add nodes
@@ -493,7 +530,7 @@ def build_analysis_graph():
     graph.add_edge("execute_code", "render_report")
     graph.add_edge("render_report", END)
 
-    # Compile with checkpointer
+    # Compile with checkpointer (per-session)
     return graph.compile(checkpointer=st.session_state.checkpointer)
 
 
@@ -543,6 +580,7 @@ def render_chat_panel(col) -> None:
                                 "error": None,
                                 "templates": [],
                             }
+                            print(f"[DEBUG] Initial state: {list(initial_state.keys())}")
                             result = graph.invoke(
                                 initial_state,
                                 config={
@@ -550,6 +588,12 @@ def render_chat_panel(col) -> None:
                                     "thread_id": st.session_state.thread_id,
                                 },
                             )
+                            print(f"[DEBUG] Result type: {type(result)}")
+                            print(f"[DEBUG] Result keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
+                            print(f"[DEBUG] Report summary: {result.get('report_summary', 'MISSING')[:100] if isinstance(result, dict) else 'N/A'}")
+                            print(f"[DEBUG] Execution blocks count: {len(result.get('execution_blocks', [])) if isinstance(result, dict) else 'N/A'}")
+                            print(f"[DEBUG] Error field: {result.get('error', 'None') if isinstance(result, dict) else 'N/A'}")
+
                             st.session_state.graph_run_state = result
                             st.session_state.plan_steps = result.get("plan_steps", [])
                             st.session_state.plan_code = result.get("code", "")
@@ -562,6 +606,9 @@ def render_chat_panel(col) -> None:
                                 or "Analysis complete. See Code tab for details."
                             )
                         except Exception as exc:
+                            print(f"[DEBUG] Exception in graph.invoke(): {type(exc).__name__}: {str(exc)}")
+                            import traceback
+                            traceback.print_exc()
                             error_msg = format_error(exc)
 
                 if error_msg:
@@ -648,11 +695,16 @@ def render_tabs_panel(col) -> None:
         with tab_code:
             if st.session_state.graph_run_state:
                 state = st.session_state.graph_run_state
+                # DEBUG: Show state structure
+                print(f"[DEBUG-UI] Code tab: state type={type(state)}, has_report={bool(state.get('report_summary'))}, blocks_count={len(state.get('execution_blocks', []))}")
+
                 # Display report summary at top
                 if state.get("report_summary"):
                     st.markdown("### Report Summary")
                     st.markdown(state["report_summary"])
                     st.divider()
+                else:
+                    st.warning("No report summary available")
 
                 # Display execution blocks (always visible, not collapsed)
                 if state.get("execution_blocks"):
@@ -660,21 +712,35 @@ def render_tabs_panel(col) -> None:
                     for i, block in enumerate(state["execution_blocks"], 1):
                         st.markdown(f"**Step {i}: {block.get('step', 'Analysis')}**")
                         # Code (always visible)
-                        st.code(block.get("code", "# No code"), language="python")
+                        code_str = block.get("code", "# No code")
+                        if code_str:
+                            st.code(code_str, language="python")
                         # Result
                         result = block.get("result", {})
                         if result:
                             if result.get("error"):
                                 st.error(f"Error: {result['error']}")
                             elif result.get("output_type") == "figure":
-                                st.pyplot(result["content"])
+                                # Figure is saved as file path, display using st.image
+                                fig_path = result.get("content")
+                                if fig_path and Path(fig_path).exists():
+                                    try:
+                                        st.image(fig_path)
+                                    except Exception as e:
+                                        st.error(f"Could not display figure: {e}")
+                                else:
+                                    st.warning(f"Figure file not found: {fig_path}")
                             elif result.get("output_type") == "dataframe":
                                 st.dataframe(
                                     result["content"], use_container_width=True
                                 )
                             elif result.get("output_type") == "text":
                                 st.markdown(result["content"])
+                            elif result.get("output_type") == "none":
+                                st.info("(No output)")
                         st.divider()
+                else:
+                    st.warning("No execution blocks available")
 
                 # Error display
                 if state.get("error"):
@@ -729,7 +795,15 @@ def render_results_panel(col) -> None:
         if result is None:
             st.info("Analysis results will appear here after you execute a plan.")
         elif result["output_type"] == "figure":
-            st.pyplot(result["content"])
+            # Figure is saved as file path, display using st.image
+            fig_path = result.get("content")
+            if fig_path and Path(fig_path).exists():
+                try:
+                    st.image(fig_path)
+                except Exception as e:
+                    st.error(f"Could not display figure: {e}")
+            else:
+                st.warning(f"Figure file not found: {fig_path}")
         elif result["output_type"] == "dataframe":
             st.dataframe(result["content"], use_container_width=True)
         elif result["output_type"] == "text":
