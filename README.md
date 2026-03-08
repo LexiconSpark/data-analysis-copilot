@@ -1,3 +1,4 @@
+
 # Run these in terminal 
 
 ## Setup virtual environment for python
@@ -8,6 +9,24 @@ python3.12 -m venv .venv
 ```
 source .venv/bin/activate
 ```
+
+## Get Claude Code to run faster in this project
+### To bypass permissions so Claude is not asking too many permissions 
+If you are using Claude Code's VS Code extension:
+Create .claude/settings.json in your speckit project root (git-committable, shares with team):
+```
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  }
+}
+```
+If you are using Claude code in terminal,  use this command in terminal: 
+```claude --dangerously-skip-permissions "{ Insert your Claude code command here }"```
+
+###  Enable claude code fast mode 
+To enable it, type ```/fast ``` in the Claude Code's VS Code extension,  and accept turning on fast mode in the terminal. 
+Or directly in the terminal type ```/fast```
 
 ## Install spec-kit once and use everywhere:
 
