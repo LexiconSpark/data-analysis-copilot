@@ -79,3 +79,18 @@ After implementing this if there are any errors, please use claude code to fix t
             "C": [5, 15, 25, 35, 45, 55, 65, 75, 85, 95],
 and it is passed as context for the chatbot. The csv data should also be displayed on the streamlit UI. The user should be able to interact with the chatbot based on the csv. Keep the changes in this git branch only.
 ```
+
+### Update UI (with 4 quadrants)
+```
+/speckit.specify We’re building an AI data analyst copilot for companies and engineers who need to analyze CSV data through code, generate reports, and interact through a chatbot interface.
+
+At this stage, the target user is engineers working with CSV files. The UI is a 2-column, 2-row Streamlit layout with four quadrants:
+Top left: chat interface
+Top right: plan / code / template tabs
+Bottom left: editable CSV table with a default CSV and upload option
+Bottom right: placeholder for analysis results in the future
+
+![](UI_design/design1.png)
+![](UI_design/design2.png)
+```
+

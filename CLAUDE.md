@@ -23,6 +23,7 @@ Python 3.11+: Follow standard conventions
 
 ## Recent Changes
 - 001-gpt4o-chatbot: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
+- 001-gpt4o-chatbot: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 
 - 001-gpt4o-chatbot: Added Python 3.11+ + streamlit>=1.28.0, langchain>=0.3.0, langchain-openai>=0.1.0, langchain-community>=0.3.0, openai>=1.0.0, python-dotenv>=1.0.0
 

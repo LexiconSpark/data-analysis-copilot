@@ -1,127 +1,104 @@
-# Implementation Plan: GPT-4o Chatbot + CSV Context + LangSmith Tracing
+# Implementation Plan: [FEATURE]
 
-**Branch**: `001-gpt4o-chatbot` | **Date**: 2026-03-04 | **Spec**: [spec.md](spec.md)
-**Input**: Feature specification from `/specs/001-gpt4o-chatbot/spec.md`
+**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
+**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
+
+**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-A single-file Streamlit app (`app.py`) wrapping a LangChain LCEL chain backed by OpenAI GPT-4o. Features: multi-turn conversation memory, CSV data as LLM context (default dataset pre-loaded; user can upload), CSV display in sidebar, and LangSmith tracing via environment variables. Configuration via module-level constants; secrets via `.env`.
+[Extract from feature spec: primary requirement + technical approach from research]
 
 ## Technical Context
 
-**Language/Version**: Python 3.11+
-**Primary Dependencies**: streamlit>=1.28.0, langchain>=0.3.0, langchain-openai>=0.1.0, langchain-community>=0.3.0, openai>=1.0.0, python-dotenv>=1.0.0, pandas>=2.0.0, langsmith>=0.1.0
-**Storage**: In-memory session state only (no persistence)
-**Testing**: pytest (unit), manual smoke test
-**Target Platform**: Local / Streamlit Community Cloud
-**Project Type**: Web application (single-page Streamlit app)
-**Performance Goals**: AI response within 10s for typical messages; CSV upload confirmation within 5s for files ≤5MB
-**Constraints**: Single user per session; no auth; CSV capped at 10,000 rows; no code execution engine
-**Scale/Scope**: Single-user session-scoped; one active CSV at a time
+<!--
+  ACTION REQUIRED: Replace the content in this section with the technical details
+  for the project. The structure here is presented in advisory capacity to guide
+  the iteration process.
+-->
+
+**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
+**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
+**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
+**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
+**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
+**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
+**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
+**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
+**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
 
 ## Constitution Check
 
-No project constitution defined. No gates to evaluate.
+*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+
+[Gates determined based on constitution file]
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/001-gpt4o-chatbot/
-├── plan.md              # This file
-├── research.md          # Architectural decisions (11 decisions documented)
-├── data-model.md        # Entities: Message, ConversationSession, CSVDataset, AppConfig
-├── quickstart.md        # Setup and run instructions
-├── contracts/
-│   └── ui-contract.md   # UI component contracts and session state schema
-└── tasks.md             # Implementation tasks (T001–T022 complete; T022 manual)
+specs/[###-feature]/
+├── plan.md              # This file (/speckit.plan command output)
+├── research.md          # Phase 0 output (/speckit.plan command)
+├── data-model.md        # Phase 1 output (/speckit.plan command)
+├── quickstart.md        # Phase 1 output (/speckit.plan command)
+├── contracts/           # Phase 1 output (/speckit.plan command)
+└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
 ```
 
 ### Source Code (repository root)
+<!--
+  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
+  for this feature. Delete unused options and expand the chosen structure with
+  real paths (e.g., apps/admin, packages/something). The delivered plan must
+  not include Option labels.
+-->
 
 ```text
-app.py                   # Single-file Streamlit application (all logic here)
-requirements.txt         # Python dependencies
-.env                     # API key + LangSmith keys (git-ignored)
-.env.example             # Template for .env
-.gitignore
+# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
+src/
+├── models/
+├── services/
+├── cli/
+└── lib/
+
+tests/
+├── contract/
+├── integration/
+└── unit/
+
+# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
+backend/
+├── src/
+│   ├── models/
+│   ├── services/
+│   └── api/
+└── tests/
+
+frontend/
+├── src/
+│   ├── components/
+│   ├── pages/
+│   └── services/
+└── tests/
+
+# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
+api/
+└── [same as backend above]
+
+ios/ or android/
+└── [platform-specific structure: feature modules, UI flows, platform tests]
 ```
 
-**Structure Decision**: Single-file layout. The app is ≤270 lines with a clear, flat function structure.
+**Structure Decision**: [Document the selected structure and reference the real
+directories captured above]
 
-## Key Architectural Decisions
+## Complexity Tracking
 
-### 1. LangChain Memory — `RunnableWithMessageHistory`
+> **Fill ONLY if Constitution Check has violations that must be justified**
 
-`ConversationBufferMemory` is deprecated in LangChain 0.3+. The modern pattern uses `RunnableWithMessageHistory` with `ChatMessageHistory` stored in `st.session_state` so history survives Streamlit reruns.
-
-### 2. CSV Context Injection — Runtime Template Variable
-
-The prompt template uses `("system", "{system_context}")`. `build_system_context()` assembles `SYSTEM_PROMPT + CSV data` from `st.session_state.df` and passes it at every `.invoke()` call. This keeps `@st.cache_resource` intact while allowing per-invoke CSV context.
-
-### 3. CSV Display — Sidebar
-
-`st.sidebar` holds the file uploader, dataframe preview, "Reset to default data" button, row/column metadata, and tracing status.
-
-### 4. Default CSV — Always Pre-Loaded
-
-`DEFAULT_CSV_DATA` (columns A, B, C; 10 rows each) is loaded into session state on startup. No empty-state handling needed.
-
-### 5. Config — Module-Level Constants
-
-Model, temperature, system prompt, and LangSmith project name are module-level constants at the top of `app.py`. Secrets via `.env` + `python-dotenv`.
-
-### 6. LangSmith Tracing — Environment Variables + Enhanced Metadata
-
-LangChain auto-traces to LangSmith when `LANGSMITH_TRACING=true` and `LANGSMITH_API_KEY` are set — no SDK wrappers needed. Each `.invoke()` also passes `run_name`, `tags`, and `metadata` (session ID, CSV shape) for searchable, annotated traces.
-
-### 7. Loading State — Two-Rerun Pattern
-
-Streamlit has no async. Input is blocked during LLM calls via `st.session_state.is_loading`. User submits → `is_loading=True` → `st.rerun()` → loading branch makes API call → `is_loading=False` → `st.rerun()`.
-
-## Data Flow
-
-```
-User types message
-       │
-       ▼
-Validate: non-empty
-       │
-       ▼
-Append to st.session_state.messages (role="user")
-Set st.session_state.is_loading = True → st.rerun()
-       │
-       ▼ (loading branch)
-build_system_context()
-  → SYSTEM_PROMPT + st.session_state.df.to_csv()
-       │
-       ▼
-RunnableWithMessageHistory.invoke(
-    {"input": user_msg, "system_context": system_context},
-    config={
-        "configurable": {"session_id": ...},
-        "run_name": "csv-chat",
-        "tags": ["streamlit", "csv-context"],
-        "metadata": {"session_id": ..., "csv_rows": N, "csv_cols": M},
-    }
-)  ← trace emitted to LangSmith if LANGSMITH_TRACING=true
-       │
-       ▼
-Append response to st.session_state.messages (role="assistant")
-Set st.session_state.is_loading = False → st.rerun()
-       │
-       ▼ (normal branch)
-render_conversation() + st.chat_input()
-```
-
-## Session State Schema
-
-| Key | Type | Default | Reset on "New Chat" |
-|-----|------|---------|---------------------|
-| `messages` | `list[dict]` | `[]` | Yes |
-| `history` | `ChatMessageHistory` | new instance | Yes |
-| `session_id` | `str` (UUID) | auto-generated | No |
-| `is_loading` | `bool` | `False` | Yes |
-| `df` | `pd.DataFrame` | `DEFAULT_CSV_DATA` | No |
-| `csv_truncated` | `bool` | `False` | No |
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|-------------------------------------|
+| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
+| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
