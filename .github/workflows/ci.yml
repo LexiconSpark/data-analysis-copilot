@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main, code-generation]
+  pull_request:
+    branches: [main, code-generation]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install ruff
+      - run: ruff check .
+      - run: ruff format --check .
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install pip-audit
+      - run: pip-audit -r requirements.txt
+
+  test:
+    runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: dummy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt pytest pytest-mock
+      - run: pytest tests/ -v
