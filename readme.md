@@ -53,23 +53,22 @@ All three files cover the same time window, so they should be treated as three d
 ## What each CSV means
 
 ### 1. `chart1_tracking_command_response.csv`
-This file is used to check whether the **Response** follows the **Command**.
+Checks whether the **Response** follows the **Command**.
 
-Main idea:
-- if Response stays close to Command, things are normal
-- if Response goes outside the allowed range, there is a tracking failure
+- If Response stays within ±5% of Command, tracking is normal
+- If Response overshoots, undershoots, oscillates, or exceeds ±5% during transitions, there is a tracking failure
 
 ### 2. `chart2_power_supply_output.csv`
-This file is used to check whether the problem is related to **power instability**.
+Checks whether the problem is related to **power instability**.
 
-Main idea:
-- if Supply Voltage drops and Output gets worse at the same time, the issue may be power-related
+- If Supply Voltage drops and Output weakens, drops, or gets noisy at the same time, the issue may be power-related
+- If Output remains stable despite normal voltage variation, there is no strong evidence of power failure
 
 ### 3. `chart3_mode_sensor_mismatch.csv`
-This file is used to check whether the issue is a **sensor mismatch during a special mode**.
+Checks whether the issue is a **sensor mismatch during a special mode**.
 
-Main idea:
-- if Sensor1 and Sensor2 usually agree, but diverge during one mode or one event window, the issue may be mode-specific
+- If Sensor1 and Sensor2 agree during normal operation but diverge mainly in one mode or event window, the issue may be mode-specific
+- If disagreement exists across the full capture, it is persistent sensor disagreement
 
 ---
 
@@ -78,30 +77,32 @@ Main idea:
 There are **four prompts** in this project.
 
 ### Overall Prompt
-Use this when you want the AI to act like an engineer doing the **full diagnostic flow**.
+Use this when you want the AI to act like an engineer doing the **full diagnostic flow**. It tells the AI to start with CSV1, move to CSV2 only if needed, move to CSV3 if the problem is still not explained, and give a final report. Use this when you want **one complete diagnosis**.
 
-It tells the AI to:
-- start with CSV1
-- move to CSV2 only if needed
-- move to CSV3 if the problem is still not explained
-- give a final report
+```text
+Diagnose one machine event using three synchronized CSVs from the same time window. In CSV1, compare Command vs Response: if Response deviates >±5% during transitions, flag tracking failure. If tracking fails, check CSV2: compare Supply Voltage vs Output; if Output weakens, drops, or gets noisy when Voltage dips, classify power-related failure. If not, check CSV3: compare Sensor1 vs Sensor2; if they diverge mainly in one mode/event window, classify mode-specific sensor mismatch. Output format: Step 1 finding; Step 2 finding; Step 3 finding; Final fault type; Root-cause hypothesis; Recommended next check.
+```
 
-Use this when you want **one complete diagnosis**.
+### Prompt 1 — CSV1
+Use this when you want to study **only the command vs response relationship**. This is the first check because it looks for the most visible problem.
 
-### Prompt 1
-Use this when you want to study **only the command vs response relationship**.
+```text
+Analyze CSV1 only. Compare Command and Response over time. Check whether Response stays within ±5% of Command, especially during command transitions. If yes, classify normal tracking. If Response overshoots, undershoots, oscillates, or repeatedly exceeds ±5%, classify tracking failure. Output format: CSV used; Columns used; Expected relationship; Observed relationship; Pass/Fail; Key failure timestamps; Short conclusion.
+```
 
-This is the first check because it looks for the most visible problem.
+### Prompt 2 — CSV2
+Use this when you want to study **only the voltage vs output relationship**. Useful when you already think the issue may be caused by weak or unstable power.
 
-### Prompt 2
-Use this when you want to study **only the voltage vs output relationship**.
+```text
+Analyze CSV2 only. Compare Supply Voltage and Output over time. Check whether Output drops, weakens, or becomes noisy when Supply Voltage dips. If degradation clearly aligns with voltage drop, classify power-related failure. If Output remains stable despite normal voltage variation, classify no strong evidence of power failure. Output format: CSV used; Columns used; Expected relationship; Observed relationship; Pass/Fail; Key correlated timestamps; Short conclusion.
+```
 
-This is useful when you already think the issue may be caused by weak or unstable power.
+### Prompt 3 — CSV3
+Use this when you want to study **only the sensor mismatch behavior**. Useful when the problem seems more subtle and may depend on operating mode.
 
-### Prompt 3
-Use this when you want to study **only the sensor mismatch behavior**.
-
-This is useful when the problem seems more subtle and may depend on operating mode.
+```text
+Analyze CSV3 only. Compare Sensor1 and Sensor2 over time, plus Mode if available. Check whether the sensors agree during normal operation and diverge mainly during one mode or event window. If divergence is mode-specific, classify mode-specific sensor mismatch. If disagreement exists across the full capture, classify persistent sensor disagreement. Output format: CSV used; Columns used; Expected relationship; Observed relationship; Pass/Fail; Key mismatch timestamps; Short conclusion.
+```
 
 ---
 
