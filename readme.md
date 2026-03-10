@@ -80,28 +80,28 @@ There are **four prompts** in this project.
 Use this when you want the AI to act like an engineer doing the **full diagnostic flow**. It tells the AI to start with CSV1, move to CSV2 only if needed, move to CSV3 if the problem is still not explained, and give a final report. Use this when you want **one complete diagnosis**.
 
 ```text
-Diagnose one machine event using three synchronized CSVs from the same time window. In CSV1, compare Command vs Response: if Response deviates >±5% during transitions, flag tracking failure. If tracking fails, check CSV2: compare Supply Voltage vs Output; if Output weakens, drops, or gets noisy when Voltage dips, classify power-related failure. If not, check CSV3: compare Sensor1 vs Sensor2; if they diverge mainly in one mode/event window, classify mode-specific sensor mismatch. Output format: Step 1 finding; Step 2 finding; Step 3 finding; Final fault type; Root-cause hypothesis; Recommended next check.
+Diagnose one machine event using three synchronized CSVs from the same time window. In CSV1, compare Command vs Response: if Response deviates >±5% during transitions, flag tracking failure. If tracking fails, check CSV2: compare Supply Voltage vs Output; if Output weakens, drops, or gets noisy when Voltage dips, classify power-related failure. If not, check CSV3: compare Sensor1 vs Sensor2; if they diverge mainly in one mode/event window, classify mode-specific sensor mismatch. Output format: Step 1 finding; Step 2 finding; Step 3 finding; Final fault type; Root-cause hypothesis; Recommended next check. Include three charts in the output report: one for each step (CSV1, CSV2, CSV3).
 ```
 
 ### Prompt 1 — CSV1
 Use this when you want to study **only the command vs response relationship**. This is the first check because it looks for the most visible problem.
 
 ```text
-Analyze CSV1 only. Compare Command and Response over time. Check whether Response stays within ±5% of Command, especially during command transitions. If yes, classify normal tracking. If Response overshoots, undershoots, oscillates, or repeatedly exceeds ±5%, classify tracking failure. Output format: CSV used; Columns used; Expected relationship; Observed relationship; Pass/Fail; Key failure timestamps; Short conclusion.
+Analyze CSV1. Compare Command vs Response. Pass if Response stays within ±5% of Command; fail if it overshoots, undershoots, or exceeds ±5%. Output: Pass/Fail; key timestamps; conclusion. Include one chart.
 ```
 
 ### Prompt 2 — CSV2
 Use this when you want to study **only the voltage vs output relationship**. Useful when you already think the issue may be caused by weak or unstable power.
 
 ```text
-Analyze CSV2 only. Compare Supply Voltage and Output over time. Check whether Output drops, weakens, or becomes noisy when Supply Voltage dips. If degradation clearly aligns with voltage drop, classify power-related failure. If Output remains stable despite normal voltage variation, classify no strong evidence of power failure. Output format: CSV used; Columns used; Expected relationship; Observed relationship; Pass/Fail; Key correlated timestamps; Short conclusion.
+Analyze CSV2. Compare Supply Voltage vs Output. Pass if Output stays stable; fail if Output drops or gets noisy when Voltage dips. Output: Pass/Fail; key timestamps; conclusion. Include one chart.
 ```
 
 ### Prompt 3 — CSV3
 Use this when you want to study **only the sensor mismatch behavior**. Useful when the problem seems more subtle and may depend on operating mode.
 
 ```text
-Analyze CSV3 only. Compare Sensor1 and Sensor2 over time, plus Mode if available. Check whether the sensors agree during normal operation and diverge mainly during one mode or event window. If divergence is mode-specific, classify mode-specific sensor mismatch. If disagreement exists across the full capture, classify persistent sensor disagreement. Output format: CSV used; Columns used; Expected relationship; Observed relationship; Pass/Fail; Key mismatch timestamps; Short conclusion.
+Analyze CSV3. Compare Sensor1 vs Sensor2 (and Mode). Pass if sensors agree; fail if they diverge in one mode (mode-specific) or across the full capture (persistent). Output: Pass/Fail; key timestamps; conclusion. Include one chart.
 ```
 
 ---
