@@ -30,8 +30,9 @@ This is how many engineers think in real debugging work:
 
 Instead of guessing, they use signal data from CSV files to test each idea step by step.
 
+The following image illustrates the 3 charts' success and failure mode:
 
-![Diagnostic style infographic](diagnostic_style_infographic.png)
+![Circuit Diagnostic style infographic](circuit_diagnostic_style_infographic.png)
 
 ---
 
