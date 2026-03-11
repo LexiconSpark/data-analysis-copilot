@@ -30,6 +30,9 @@ This is how many engineers think in real debugging work:
 
 Instead of guessing, they use signal data from CSV files to test each idea step by step.
 
+
+![Diagnostic style infographic](diagnostic_style_infographic.png)
+
 ---
 
 ## The client scenario
