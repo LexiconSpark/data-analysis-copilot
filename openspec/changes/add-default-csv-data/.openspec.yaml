@@ -1,0 +1,7 @@
+name: add-default-csv-data
+description: Add built-in default CSV data for immediate onboarding
+status: proposed
+artifacts:
+  - proposal.md
+  - design.md
+  - tasks.md

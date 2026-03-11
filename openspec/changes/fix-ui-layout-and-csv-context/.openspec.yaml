@@ -1,0 +1,7 @@
+name: fix-ui-layout-and-csv-context
+description: Fix UI layout - remove Results tab, add CSV upload, improve context management
+status: proposed
+artifacts:
+  - proposal.md
+  - design.md
+  - tasks.md

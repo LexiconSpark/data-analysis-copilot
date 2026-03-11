@@ -1,0 +1,7 @@
+name: ai-analyst-copilot
+description: Build an AI Data Analyst Co-Pilot with Next.js, Vercel AI SDK, and LangGraph
+status: proposed
+artifacts:
+  - proposal.md
+  - design.md
+  - tasks.md
